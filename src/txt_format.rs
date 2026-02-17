@@ -4,7 +4,6 @@ pub mod txt_format {
     use std::fmt::{Display, Formatter};
     use std::io::{BufRead, BufReader, Read, Write};
     use std::str::FromStr;
-    use derive_macros::GenerateProcessedFields;
 
     enum TransactionType {
         Deposit,
@@ -46,7 +45,6 @@ pub mod txt_format {
         }
     }
 
-    #[derive(GenerateProcessedFields)]
     struct YPBankTextRecord {
         id: u32,
         transaction_type: TransactionType,
@@ -116,7 +114,7 @@ pub mod txt_format {
             }
         }
 
-        fn write_to<W: Write>(&mut self, writer: &mut W) -> Result<(), &(dyn Error + 'static)> {
+        fn write_to<W: Write>(&mut self, writer: &mut W) -> Result<(), TextRecordError> {
             todo!()
         }
     }
@@ -142,7 +140,6 @@ pub mod txt_format {
                 return Err(TextRecordError::WrongFieldsCount { line_index: start_line_index });
             }
 
-            let mut processed_fields: ProcessedFields = ProcessedFields::empty();
             let mut record = YPBankTextRecord::default();
             let line_index = start_line_index;
 
@@ -159,46 +156,33 @@ pub mod txt_format {
                 match key {
                     "TX_ID" => {
                         record.id = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::Id;
                     }
                     "TX_TYPE" => {
                         record.transaction_type = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::TransactionType;
                     }
                     "FROM_USER_ID" => {
                         record.from_user_id = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::FromUserId;
                     }
                     "TO_USER_ID" => {
                         record.to_user_id = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::ToUserId;
                     }
                     "AMOUNT" => {
                         record.amount = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::Amount;
                     }
                     "TIMESTAMP" => {
                         record.timestamp = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::Timestamp;
                     }
                     "STATUS" => {
                         record.transaction_status = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::TransactionStatus;
                     }
                     "DESCRIPTION" => {
                         record.description = parse(key, value, line_index)?;
-                        processed_fields |= ProcessedFields::Description;
                     }
                     _ => return Err(TextRecordError::UnexpectedKey { line_index }),
                 }
             }
 
-            if processed_fields.is_all() {
-                Ok(record)
-            }
-            else {
-                Err(TextRecordError::NotAllFieldsSet { line_index })
-            }
+            Ok(record)
         }
     }
 
