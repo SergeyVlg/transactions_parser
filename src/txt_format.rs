@@ -1,4 +1,5 @@
 pub mod txt_format {
+    use std::collections::HashMap;
     use crate::Parser;
     use std::error::Error;
     use std::fmt::{Display, Formatter};
@@ -188,5 +189,110 @@ pub mod txt_format {
 
     fn parse<T: FromStr>(key: &str, value: &str, line_index: usize) -> Result<T, TextRecordError> {
         value.parse().or_else(|_| return Err(TextRecordError::ParseError { wrong_field: key.to_string(), line_index }))
+    }
+
+    //---------------
+    //реализация через serde, плюс оптимизации по выделению памяти
+
+    use serde::Deserialize;
+    use std::fs::File;
+    use std::io;
+
+    #[derive(Debug, Deserialize)]
+    pub struct Transaction {
+        #[serde(rename = "TX_ID")]
+        pub id: u64,
+        #[serde(rename = "TX_TYPE")]
+        pub transaction_type: String,
+        #[serde(rename = "AMOUNT")]
+        pub amount: f64,
+    }
+
+    pub struct FastTransactionLoader {
+        reader: BufReader<File>,
+        // Переиспользуем память вектора и строк
+        kv_pairs: Vec<(String, String)>,
+        line_buf: String,
+    }
+
+    impl FastTransactionLoader {
+        pub fn new(path: &str) -> io::Result<Self> {
+            Ok(Self {
+                reader: BufReader::new(File::open(path)?),
+                kv_pairs: Vec::with_capacity(8), // Заранее аллоцируем место под поля, лучше в именованную константу
+                line_buf: String::with_capacity(128),
+            })
+        }
+
+        fn parse_block(&self) -> Result<Transaction, String> {
+            // Конвертируем Vec в Value для Serde
+            let map: HashMap<_, _> = self.kv_pairs.iter().cloned().collect();
+            serde_json::to_value(map) //вот тут не оч, т.к. приплетается конверсия в json. Лучше бы как-то самому это распознавать
+                .and_then(serde_json::from_value)
+                .map_err(|e| e.to_string())
+        }
+    }
+
+    impl Iterator for FastTransactionLoader {
+        type Item = Result<Transaction, String>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.kv_pairs.clear();
+
+            while self.reader.read_line(&mut self.line_buf).unwrap_or(0) > 0 {
+                let trimmed = self.line_buf.trim();
+
+                if trimmed.is_empty() {
+                    if !self.kv_pairs.is_empty() {
+                        self.line_buf.clear();
+                        return Some(self.parse_block());
+                    }
+                } else if let Some((k, v)) = trimmed.split_once(':') {
+                    // Сохраняем значения, минимизируя аллокации
+                    self.kv_pairs.push((k.trim().to_owned(), v.trim().to_owned()));
+                }
+
+                self.line_buf.clear(); // Очищаем буфер строки для следующей итерации
+            }
+
+            // Обработка последнего блока
+            if !self.kv_pairs.is_empty() {
+                let res = self.parse_block();
+                self.kv_pairs.clear();
+                Some(res)
+            } else {
+                None
+            }
+        }
+    }
+
+    //второй вариант, без json
+    use serde::Deserialize;
+    use std::collections::HashMap;
+    use std::io::{BufRead, BufReader};
+    use std::fs::File;
+
+    // Используем этот крейт для автоматического парсинга строк в числа
+    // Добавь в Cargo.toml: serde_with = "3.0"
+    use serde_with::{serde_as, DisplayFromStr};
+
+    #[serde_as]
+    #[derive(Debug, Deserialize)]
+    struct Transaction {
+        #[serde(rename = "TX_ID")]
+        #[serde_as(as = "DisplayFromStr")] // Магия: берет строку и делает parse()
+        pub id: u64,
+
+        #[serde(rename = "TX_TYPE")]
+        pub transaction_type: String,
+
+        #[serde(rename = "AMOUNT")]
+        #[serde_as(as = "DisplayFromStr")] // Магия: берет строку и делает parse()
+        pub amount: f64,
+    }
+
+    fn process_block(map: HashMap<String, String>) -> Result<Transaction, String> {
+        Transaction::deserialize(serde::de::value::MapDeserializer::new(map.into_iter()))
+            .map_err(|e: serde::de::value::Error| e.to_string())
     }
 }
