@@ -6,10 +6,11 @@ pub mod txt_format {
     use std::io::{BufRead, BufReader, Read, Write};
     use std::str::FromStr;
 
+    #[derive(Debug, Deserialize)]
     enum TransactionType {
-        Deposit,
-        Transfer,
-        Withdrawal
+        #[serde(rename = "DEPOSIT")] Deposit,
+        #[serde(rename = "TRANSFER")] Transfer,
+        #[serde(rename = "WITHDRAWAL")] Withdrawal
     }
 
     impl FromStr for TransactionType {
@@ -26,10 +27,11 @@ pub mod txt_format {
         }
     }
 
+    #[derive(Debug, Deserialize)]
     enum TransactionStatus {
-        Pending,
-        Success,
-        Failure
+        #[serde(rename = "PENDING")] Pending,
+        #[serde(rename = "SUCCESS")] Success,
+        #[serde(rename = "FAILURE")] Failure
     }
 
     impl FromStr for TransactionStatus {
@@ -46,14 +48,35 @@ pub mod txt_format {
         }
     }
 
+    #[serde_as]
+    #[derive(Debug, Deserialize)]
     struct YPBankTextRecord {
+        #[serde(rename = "TX_ID")]
+        #[serde_as(as = "DisplayFromStr")]
         id: u32,
+
+        #[serde(rename = "TX_TYPE")]
         transaction_type: TransactionType,
+
+        #[serde(rename = "FROM_USER_ID")]
+        #[serde_as(as = "DisplayFromStr")]
         from_user_id: u32,
+
+        #[serde(rename = "TO_USER_ID")]
+        #[serde_as(as = "DisplayFromStr")]
         to_user_id: u32,
+
+        #[serde(rename = "AMOUNT")]
+        #[serde_as(as = "DisplayFromStr")]
         amount: u64,
+
+        #[serde(rename = "TIMESTAMP")]
+        #[serde_as(as = "DisplayFromStr")]
         timestamp: u64,
+
+        #[serde(rename = "STATUS")]
         transaction_status: TransactionStatus,
+        #[serde(rename = "DESCRIPTION")]
         description: String
     }
 
@@ -79,40 +102,40 @@ pub mod txt_format {
     impl Error for TextRecordError {}
 
     impl Parser<TextRecordError> for YPBankTextRecord {
-        fn from_read<R: Read>(reader: &mut R) -> Result<Vec<YPBankTextRecord>, TextRecordError> {
-            let mut records = vec![];
-            let buff_reader = BufReader::new(reader);
-            let mut current_transaction_raw: Vec<String> = vec![];
+        fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
+            let mut buff_reader = BufReader::new(reader);
+            let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8); //сразу аллоцируем память
+            let mut line_buf = String::with_capacity(128);
 
-            for (index, line_result) in buff_reader.lines().enumerate() {
-                let line = line_result.map_err(TextRecordError::ReadLineError)?;
-                let trimmed_line = line.trim();
+            while buff_reader.read_line(&mut line_buf).unwrap_or(0) > 0 { //вот тут может сожраться ошибка
+                let trimmed_line = line_buf.trim();
 
                 if trimmed_line.starts_with('#') {
                     continue;
                 }
 
                 if trimmed_line.is_empty() {
-                    if !current_transaction_raw.is_empty() {
-                        let record = YPBankTextRecord::read_transaction(&current_transaction_raw, index)?;
-                        records.push(record);
-                        current_transaction_raw.clear();
+                    if !kv_pairs.is_empty() {
+                        line_buf.clear();
+
+                        return Ok(Self::parse_transaction(&mut kv_pairs)?);
                     }
-                } else {
-                    current_transaction_raw.push(trimmed_line.to_string());
+                } else if let Some((k, v)) = trimmed_line.split_once(':') {
+                    kv_pairs.insert(k.trim().to_owned(), v.trim().to_owned());
                 }
+
+                line_buf.clear()
             }
 
-            if !current_transaction_raw.is_empty() {
-                let record = YPBankTextRecord::read_transaction(&current_transaction_raw, 0)?;
-                records.push(record);
+            // Обработка последнего блока
+            if !kv_pairs.is_empty() {
+                let res = Self::parse_transaction(&mut kv_pairs)?;
+                kv_pairs.clear();
+
+                return Ok(res);
             }
 
-            if records.is_empty() {
-                Err(TextRecordError::SourceIsEmpty)
-            } else {
-                Ok(records)
-            }
+            Err(TextRecordError::ExcessFields) //тут возможно нужна более точная ошибка - по сути это если были пустые строки или комментарии в конце файла
         }
 
         fn write_to<W: Write>(&mut self, writer: &mut W) -> Result<(), TextRecordError> {
@@ -136,65 +159,16 @@ pub mod txt_format {
             }
         }
 
-        fn read_transaction(raw_data: &[String], start_line_index: usize) -> Result<Self, TextRecordError> {
-            if raw_data.len() != Self::FIELDS_COUNT {
-                return Err(TextRecordError::WrongFieldsCount { line_index: start_line_index });
-            }
-
-            let mut record = YPBankTextRecord::default();
-            let line_index = start_line_index;
-
-            for (offset, raw_string) in raw_data.iter().enumerate() {
-                let line_index = start_line_index + offset;
-
-                let (key, value) = raw_string
-                    .split_once(':')
-                    .ok_or(TextRecordError::WrongLineFormat { line_index })?;
-
-                let key = key.trim();
-                let value = value.trim();
-
-                match key {
-                    "TX_ID" => {
-                        record.id = parse(key, value, line_index)?;
-                    }
-                    "TX_TYPE" => {
-                        record.transaction_type = parse(key, value, line_index)?;
-                    }
-                    "FROM_USER_ID" => {
-                        record.from_user_id = parse(key, value, line_index)?;
-                    }
-                    "TO_USER_ID" => {
-                        record.to_user_id = parse(key, value, line_index)?;
-                    }
-                    "AMOUNT" => {
-                        record.amount = parse(key, value, line_index)?;
-                    }
-                    "TIMESTAMP" => {
-                        record.timestamp = parse(key, value, line_index)?;
-                    }
-                    "STATUS" => {
-                        record.transaction_status = parse(key, value, line_index)?;
-                    }
-                    "DESCRIPTION" => {
-                        record.description = parse(key, value, line_index)?;
-                    }
-                    _ => return Err(TextRecordError::UnexpectedKey { line_index }),
-                }
-            }
-
-            Ok(record)
+        fn parse_transaction(map: &mut HashMap<String, String>) -> Result<Self, String> {
+            Self::deserialize(MapDeserializer::new(map.drain()))
+                .map_err(|e: serde::de::value::Error| e.to_string())
         }
-    }
-
-    fn parse<T: FromStr>(key: &str, value: &str, line_index: usize) -> Result<T, TextRecordError> {
-        value.parse().or_else(|_| return Err(TextRecordError::ParseError { wrong_field: key.to_string(), line_index }))
     }
 
     //---------------
     //реализация через serde, плюс оптимизации по выделению памяти
 
-    use serde::Deserialize;
+    /*use serde::Deserialize;
     use std::fs::File;
     use std::io;
 
@@ -264,16 +238,15 @@ pub mod txt_format {
                 None
             }
         }
-    }
+    }*/
 
     //второй вариант, без json
     use serde::Deserialize;
-    use std::collections::HashMap;
-    use std::io::{BufRead, BufReader};
+    //use std::collections::HashMap;
+    //use std::io::{BufRead, BufReader};
     use std::fs::File;
-
+    use serde::de::value::MapDeserializer;
     // Используем этот крейт для автоматического парсинга строк в числа
-    // Добавь в Cargo.toml: serde_with = "3.0"
     use serde_with::{serde_as, DisplayFromStr};
 
     #[serde_as]
@@ -292,7 +265,7 @@ pub mod txt_format {
     }
 
     fn process_block(map: HashMap<String, String>) -> Result<Transaction, String> {
-        Transaction::deserialize(serde::de::value::MapDeserializer::new(map.into_iter()))
+        Transaction::deserialize(MapDeserializer::new(map.into_iter()))
             .map_err(|e: serde::de::value::Error| e.to_string())
     }
 }
