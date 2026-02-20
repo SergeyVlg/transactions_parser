@@ -1,5 +1,5 @@
 pub mod txt_format {
-    use crate::Parser;
+    use crate::Parsable;
     use serde::Deserialize;
     use serde_with::{serde_as, DisplayFromStr};
     use std::collections::HashMap;
@@ -126,7 +126,7 @@ pub mod txt_format {
         }
     }
 
-    impl Parser<TextRecordError, std::io::Error> for YPBankTextRecord {
+    impl Parsable<TextRecordError, std::io::Error> for YPBankTextRecord {
         fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
             let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8);
             let mut line_buf: Vec<u8> = Vec::with_capacity(128);
