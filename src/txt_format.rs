@@ -128,6 +128,64 @@ pub mod txt_format {
 
     impl Parser<TextRecordError, std::io::Error> for YPBankTextRecord {
         fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
+            let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8);
+            let mut line_buf: Vec<u8> = Vec::with_capacity(128);
+            let mut byte_buf = [0u8; 1];
+            let mut has_started = false;
+
+            loop {
+                line_buf.clear();
+                let mut eof = false;
+
+                loop {
+                    match reader.read(&mut byte_buf).map_err(TextRecordError::ReadLineError)? {
+                        0 => { eof = true; break; }
+                        _ if byte_buf[0] == b'\n' => { has_started = true; break; }
+                        _ => {
+                            has_started = true;
+                            line_buf.push(byte_buf[0]);
+                        }
+                    }
+                }
+
+                let line_str = std::str::from_utf8(&line_buf)
+                    .map_err(|_| TextRecordError::ParseError { error: "Invalid UTF-8".into() })?;
+
+                let trimmed_line = line_str.trim();
+
+                if trimmed_line.starts_with('#') {
+                    continue;
+                }
+
+                if trimmed_line.is_empty() {
+                    if !kv_pairs.is_empty() {
+                        return Ok(Self::parse_transaction(&mut kv_pairs)?);
+                    }
+
+                    if eof {
+                        return if !has_started {
+                            Err(TextRecordError::SourceIsEmpty)
+                        } else {
+                            Err(TextRecordError::EmptyLinesAtEndOfFile)
+                        };
+                    }
+
+                    continue;
+                }
+
+                let (k, v) = trimmed_line
+                    .split_once(':')
+                    .ok_or(TextRecordError::MissingColonAfterKey)?;
+
+                kv_pairs.insert(k.trim().to_owned(), v.trim().to_owned());
+
+                if eof && !kv_pairs.is_empty() {
+                    return Ok(Self::parse_transaction(&mut kv_pairs)?);
+                }
+            }
+        }
+
+        /*fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
             let mut buff_reader = BufReader::new(reader);
             let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8); //сразу аллоцируем память
             let mut line_buf = String::with_capacity(128);
@@ -178,7 +236,7 @@ pub mod txt_format {
             }
 
             Err(TextRecordError::EmptyLinesAtEndOfFile)
-        }
+        }*/
 
         fn write_to<W: Write>(&mut self, writer: &mut W) -> Result<(), std::io::Error> {
             let mut buff_writer = BufWriter::new(writer);
