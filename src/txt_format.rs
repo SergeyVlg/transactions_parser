@@ -1,11 +1,11 @@
 pub mod txt_format {
-    use crate::Parsable;
+    use crate::{Readable, Writable};
     use serde::Deserialize;
     use serde_with::{serde_as, DisplayFromStr};
     use std::collections::HashMap;
     use std::error::Error;
     use std::fmt::{Display, Formatter};
-    use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+    use std::io::{BufRead, BufWriter, Write};
     use std::str::FromStr;
 
     #[derive(Debug, Deserialize, PartialEq)]
@@ -126,78 +126,19 @@ pub mod txt_format {
         }
     }
 
-    impl Parsable<TextRecordError, std::io::Error> for YPBankTextRecord {
-        fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
-            let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8);
-            let mut line_buf: Vec<u8> = Vec::with_capacity(128);
-            let mut byte_buf = [0u8; 1];
-            let mut has_started = false;
-
-            loop {
-                line_buf.clear();
-                let mut eof = false;
-
-                loop {
-                    match reader.read(&mut byte_buf).map_err(TextRecordError::ReadLineError)? {
-                        0 => { eof = true; break; }
-                        _ if byte_buf[0] == b'\n' => { has_started = true; break; }
-                        _ => {
-                            has_started = true;
-                            line_buf.push(byte_buf[0]);
-                        }
-                    }
-                }
-
-                let line_str = std::str::from_utf8(&line_buf)
-                    .map_err(|_| TextRecordError::ParseError { error: "Invalid UTF-8".into() })?;
-
-                let trimmed_line = line_str.trim();
-
-                if trimmed_line.starts_with('#') {
-                    continue;
-                }
-
-                if trimmed_line.is_empty() {
-                    if !kv_pairs.is_empty() {
-                        return Ok(Self::parse_transaction(&mut kv_pairs)?);
-                    }
-
-                    if eof {
-                        return if !has_started {
-                            Err(TextRecordError::SourceIsEmpty)
-                        } else {
-                            Err(TextRecordError::EmptyLinesAtEndOfFile)
-                        };
-                    }
-
-                    continue;
-                }
-
-                let (k, v) = trimmed_line
-                    .split_once(':')
-                    .ok_or(TextRecordError::MissingColonAfterKey)?;
-
-                kv_pairs.insert(k.trim().to_owned(), v.trim().to_owned());
-
-                if eof && !kv_pairs.is_empty() {
-                    return Ok(Self::parse_transaction(&mut kv_pairs)?);
-                }
-            }
-        }
-
-        /*fn from_read<R: Read>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
-            let mut buff_reader = BufReader::new(reader);
+    impl Readable<TextRecordError> for YPBankTextRecord {
+        fn read<R: BufRead>(reader: &mut R) -> Result<YPBankTextRecord, TextRecordError> {
             let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8); //сразу аллоцируем память
             let mut line_buf = String::with_capacity(128);
 
-            if buff_reader.fill_buf()
+            if reader.fill_buf()
                 .map_err(|e| TextRecordError::ReadLineError(e))?
                 .is_empty() {
                 return Err(TextRecordError::SourceIsEmpty)
             }
 
             loop {
-                match buff_reader.read_line(&mut line_buf) {
+                match reader.read_line(&mut line_buf) {
                     Ok(0) => break, //EOF
                     Ok(_) => {
                         let trimmed_line = line_buf.trim();
@@ -227,7 +168,6 @@ pub mod txt_format {
                 }
             }
 
-            // Обработка последнего блока
             if !kv_pairs.is_empty() {
                 let res = Self::parse_transaction(&mut kv_pairs)?;
                 kv_pairs.clear();
@@ -236,9 +176,11 @@ pub mod txt_format {
             }
 
             Err(TextRecordError::EmptyLinesAtEndOfFile)
-        }*/
+        }
+    }
 
-        fn write_to<W: Write>(&mut self, writer: &mut W) -> Result<(), std::io::Error> {
+    impl Writable<std::io::Error> for YPBankTextRecord {
+        fn write<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
             let mut buff_writer = BufWriter::new(writer);
 
             writeln!(&mut buff_writer, "TX_ID: {}", self.id)?;
@@ -258,19 +200,6 @@ pub mod txt_format {
     }
 
     impl YPBankTextRecord {
-        fn default() -> YPBankTextRecord {
-            YPBankTextRecord {
-                id: 0,
-                transaction_type: TransactionType::Deposit,
-                from_user_id: 0,
-                to_user_id: 0,
-                amount: 0,
-                timestamp: 0,
-                transaction_status: TransactionStatus::Pending,
-                description: "".to_string()
-            }
-        }
-
         fn parse_transaction(map: &mut HashMap<String, String>) -> Result<Self, serde::de::value::Error> {
             Self::deserialize(serde::de::value::MapDeserializer::new(map.drain()))
                 .map_err(|e: serde::de::value::Error| e)
@@ -281,6 +210,7 @@ pub mod txt_format {
     mod tests {
         use super::*;
         use std::io::Cursor;
+        use crate::Parser;
 
         fn sample_record() -> YPBankTextRecord {
             YPBankTextRecord {
@@ -297,13 +227,11 @@ pub mod txt_format {
         }
 
         #[test]
-        fn write_to_writes_all_required_fields_and_blank_separator_line() {
-            let mut rec = sample_record();
-
-            // Пишем в in-memory поток, как и читаем из него в from_read-тестах
+        fn writes_all_required_fields_and_blank_separator_line() {
+            let rec = sample_record();
             let mut out = Cursor::new(Vec::<u8>::new());
 
-            rec.write_to(&mut out).unwrap();
+            rec.write(&mut out).unwrap();
 
             let bytes = out.into_inner();
             let s = String::from_utf8(bytes).unwrap();
@@ -316,8 +244,6 @@ pub mod txt_format {
             assert!(s.contains("AMOUNT: 1000\n"));
             assert!(s.contains("TIMESTAMP: 1633056800000\n"));
             assert!(s.contains("STATUS: FAILURE\n"));
-
-            // DESCRIPTION пишется как есть; тест закрепляет требование кавычек из спецификации
             assert!(s.contains("DESCRIPTION: \"User transfer\"\n"));
 
             // запись должна заканчиваться пустой строкой-разделителем
@@ -325,7 +251,7 @@ pub mod txt_format {
         }
 
         #[test]
-        fn from_read_parses_record_with_arbitrary_field_order_and_ignores_comments() {
+        fn read_parses_record_with_arbitrary_field_order_and_ignores_comments() {
             let input = r#"
 # leading comment
 TX_ID: 2312321321
@@ -339,8 +265,9 @@ DESCRIPTION: "User transfer"
 
 "#;
 
-            let mut cur = Cursor::new(input.as_bytes());
-            let rec = YPBankTextRecord::from_read(&mut cur).unwrap();
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            let rec = parser.next().expect("Should have a record").expect("Should parse successfully");
 
             assert_eq!(rec.id, 2312321321);
             assert_eq!(rec.transaction_type, TransactionType::Transfer);
@@ -350,10 +277,12 @@ DESCRIPTION: "User transfer"
             assert_eq!(rec.timestamp, 1633056800000);
             assert_eq!(rec.transaction_status, TransactionStatus::Failure);
             assert_eq!(rec.description, "\"User transfer\"");
+
+            assert!(parser.next().is_none(), "Should be consumed");
         }
 
         #[test]
-        fn from_read_reads_two_records_separated_by_blank_line() {
+        fn read_reads_two_records_separated_by_blank_line() {
             let input = r#"
 # Record 1
 TX_ID: 1
@@ -376,10 +305,11 @@ STATUS: PENDING
 DESCRIPTION: "User withdrawal"
 "#;
 
-            let mut cur = Cursor::new(input.as_bytes());
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
 
-            let r1 = YPBankTextRecord::from_read(&mut cur).unwrap();
-            let r2 = YPBankTextRecord::from_read(&mut cur).unwrap();
+            let r1 = parser.next().expect("Should have first record").expect("Should parse first record");
+            let r2 = parser.next().expect("Should have second record").expect("Should parse second record");
 
             // Record 1
             assert_eq!(r1.id, 1);
@@ -400,10 +330,12 @@ DESCRIPTION: "User withdrawal"
             assert_eq!(r2.timestamp, 2);
             assert_eq!(r2.transaction_status, TransactionStatus::Pending);
             assert_eq!(r2.description, "\"User withdrawal\"");
+
+            assert!(parser.next().is_none());
         }
 
         #[test]
-        fn from_read_parses_last_block_without_trailing_blank_line() {
+        fn read_parses_last_block_without_trailing_blank_line() {
             let input = r#"
 TX_ID: 3
 TX_TYPE: TRANSFER
@@ -415,15 +347,23 @@ STATUS: SUCCESS
 DESCRIPTION: "No trailing blank"
 "#;
 
-            let mut cur = Cursor::new(input.as_bytes());
-            let rec = YPBankTextRecord::from_read(&mut cur).unwrap();
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            let rec = parser.next().expect("Should have one record").expect("Should parse");
 
             assert_eq!(rec.id, 3);
+            assert_eq!(rec.transaction_type, TransactionType::Transfer);
+            assert_eq!(rec.from_user_id, 1);
+            assert_eq!(rec.to_user_id, 2);
+            assert_eq!(rec.amount, 7);
+            assert_eq!(rec.timestamp, 3);
+            assert_eq!(rec.transaction_status, TransactionStatus::Success);
             assert_eq!(rec.description, "\"No trailing blank\"");
+            assert!(parser.next().is_none());
         }
 
         #[test]
-        fn from_read_errors_on_line_without_colon() {
+        fn read_line_without_colon_errors() {
             let input = r#"
 TX_ID 123
 TX_TYPE: DEPOSIT
@@ -436,15 +376,16 @@ DESCRIPTION: "x"
 
 "#;
 
-            let mut cur = Cursor::new(input.as_bytes());
-            let err = YPBankTextRecord::from_read(&mut cur).unwrap_err();
-            assert!(matches!(err, TextRecordError::MissingColonAfterKey));
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            assert!(parser.next().is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::MissingColonAfterKey));
         }
 
         #[test]
-        fn from_read_errors_on_invalid_data_types() {
-            // 1. Отрицательный ID (ожидается u32)
-            let input_neg_id = r#"
+        fn read_invalid_data_types_errors() {
+
+            let input_negative_id = r#"
 TX_ID: -5
 TX_TYPE: DEPOSIT
 FROM_USER_ID: 0
@@ -454,11 +395,11 @@ TIMESTAMP: 1
 STATUS: SUCCESS
 DESCRIPTION: "Negative ID"
 "#;
-            let mut cur = Cursor::new(input_neg_id.as_bytes());
-            let err = YPBankTextRecord::from_read(&mut cur).unwrap_err();
-            assert!(matches!(err, TextRecordError::ParseError { .. }));
+            let cur = Cursor::new(input_negative_id.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            assert!(parser.next().is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
 
-            // 2. Строка вместо числа в AMOUNT
             let input_bad_amount = r#"
 TX_ID: 10
 TX_TYPE: DEPOSIT
@@ -469,11 +410,11 @@ TIMESTAMP: 1
 STATUS: SUCCESS
 DESCRIPTION: "Bad Amount"
 "#;
-            let mut cur = Cursor::new(input_bad_amount.as_bytes());
-            let err = YPBankTextRecord::from_read(&mut cur).unwrap_err();
-            assert!(matches!(err, TextRecordError::ParseError { .. }));
+            let cur = Cursor::new(input_bad_amount.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            assert!(parser.next().is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
 
-            // 3. Некорректный статус транзакции
             let input_bad_status = r#"
 TX_ID: 11
 TX_TYPE: DEPOSIT
@@ -484,22 +425,25 @@ TIMESTAMP: 1
 STATUS: UNKNOWN_STATUS
 DESCRIPTION: "Bad Status"
 "#;
-            let mut cur = Cursor::new(input_bad_status.as_bytes());
-            let err = YPBankTextRecord::from_read(&mut cur).unwrap_err();
-            assert!(matches!(err, TextRecordError::ParseError { .. }));
+            let cur = Cursor::new(input_bad_status.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            assert!(parser.next().is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
         }
 
         #[test]
-        fn from_read_errors_on_empty_source() {
+        fn read_errors_on_empty_source() {
             let input = "";
-            let mut cur = Cursor::new(input.as_bytes());
-            let err = YPBankTextRecord::from_read(&mut cur).unwrap_err();
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            let result = parser.next();
 
-            assert!(matches!(err, TextRecordError::SourceIsEmpty));
+            assert!(result.is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::SourceIsEmpty));
         }
 
         #[test]
-        fn from_read_ignores_extra_fields() {
+        fn read_ignores_extra_fields() {
             let input = r#"
 TX_ID: 999
 TX_TYPE: DEPOSIT
@@ -512,10 +456,10 @@ DESCRIPTION: "Extra fields test"
 UNKNOWN_FIELD: some_value
 ANOTHER_ONE: 123
 "#;
-            let mut cur = Cursor::new(input.as_bytes());
-            let Err(_) = YPBankTextRecord::from_read(&mut cur) else {
-                panic!("Extra field skipped.")
-            };
+            let cur = Cursor::new(input.as_bytes());
+            let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+            assert!(parser.next().is_none());
+            assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
         }
     }
 }
