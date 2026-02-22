@@ -7,7 +7,7 @@ use std::io::{Read, Write};
 use std::marker::PhantomData;
 
 pub trait Readable<Source: Read, E: Error> : Sized {
-    type Reader: Read;
+    type Reader;
 
     #[doc(hidden)]
     fn build_reader(source: Source) -> Self::Reader;
@@ -64,37 +64,47 @@ where
 
 pub trait Writable<E: Error> {
     #[doc(hidden)]
+    fn write_header<W: Write>(writer: &mut W) -> Result<(), E>;
+
+    #[doc(hidden)]
     fn write<W: Write>(&self, writer: &mut W) -> Result<(), E>;
 }
 
-pub struct Serializer<TRecord, Writer, E>
+pub struct Serializer<TRecord, Target, E>
 where
     TRecord: Writable<E>,
-    Writer: Write,
+    Target: Write,
     E: Error,
 {
-    writer: Writer,
+    target: Target,
     _marker: PhantomData<(TRecord, E)>,
 }
 
-impl<TRecord, Writer, E> Serializer<TRecord, Writer, E>
+impl<TRecord, Target, E> Serializer<TRecord, Target, E>
 where
     TRecord: Writable<E>,
-    Writer: Write,
+    Target: Write,
     E: Error,
 {
-    pub fn new(writer: Writer) -> Self {
+    pub fn new(target: Target) -> Self {
         Self {
-            writer,
+            target,
             _marker: PhantomData,
         }
     }
 
     pub fn serialize(&mut self, records: &[TRecord]) -> Result<(), E> {
+        TRecord::write_header(&mut self.target)?;
+
         for record in records {
-            record.write(&mut self.writer)?;
+            record.write(&mut self.target)?;
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    pub fn into_inner(self) -> Target {
+        self.target
     }
 }

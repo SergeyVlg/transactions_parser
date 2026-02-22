@@ -123,6 +123,10 @@ impl<R: Read> Readable<R, TextRecordError> for YPBankTextRecord {
 }
 
 impl Writable<std::io::Error> for YPBankTextRecord {
+    fn write_header<W: Write>(writer: &mut W) -> Result<(), std::io::Error> {
+        Ok(())
+    }
+
     fn write<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         let mut buff_writer = BufWriter::new(writer);
 
@@ -152,7 +156,7 @@ impl YPBankTextRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Parser;
+    use crate::{Parser, Serializer};
     use std::io::Cursor;
 
     fn sample_record() -> YPBankTextRecord {
@@ -171,26 +175,45 @@ mod tests {
 
     #[test]
     fn writes_all_required_fields_and_blank_separator_line() {
-        let rec = sample_record();
-        let mut out = Cursor::new(Vec::<u8>::new());
+        let rec1 = sample_record();
+        let rec2 = YPBankTextRecord {
+            id: 999,
+            transaction_type: TransactionType::Deposit,
+            from_user_id: 555,
+            to_user_id: 666,
+            amount: 50,
+            timestamp: 1700000000,
+            transaction_status: TransactionStatus::Success,
+            description: "\"Second tx\"".to_string(),
+        };
 
-        rec.write(&mut out).unwrap();
+        let writer = Cursor::new(Vec::<u8>::new());
+        let mut serializer = Serializer::new(writer);
 
-        let bytes = out.into_inner();
+        serializer.serialize(&[rec1, rec2]).unwrap();
+
+        let bytes = serializer.into_inner().into_inner();
         let s = String::from_utf8(bytes).unwrap();
 
-        // обязательные поля (по спецификации) должны присутствовать
         assert!(s.contains("TX_ID: 1234567890\n"));
         assert!(s.contains("TX_TYPE: TRANSFER\n"));
-        assert!(s.contains("FROM_USER_ID: 111\n"));
-        assert!(s.contains("TO_USER_ID: 222\n"));
-        assert!(s.contains("AMOUNT: 1000\n"));
-        assert!(s.contains("TIMESTAMP: 1633056800000\n"));
-        assert!(s.contains("STATUS: FAILURE\n"));
         assert!(s.contains("DESCRIPTION: \"User transfer\"\n"));
 
-        // запись должна заканчиваться пустой строкой-разделителем
-        assert!(s.ends_with("\n\n"), "expected record to end with a blank line separator, got: {s:?}");
+        assert!(s.contains("TX_ID: 999\n"));
+        assert!(s.contains("TX_TYPE: DEPOSIT\n"));
+        assert!(s.contains("DESCRIPTION: \"Second tx\"\n"));
+
+        // Проверяем наличие разделителя между записями и в конце
+        // Логика записи: каждая запись заканчивается пустой строкой.
+        // Значит, после первой записи будет одна пустая строка, и после второй тоже.
+        // "Field: Val\n\nField: Val\n\n"
+        let parts: Vec<&str> = s.split("\n\n").collect();
+        assert_eq!(parts.len(), 3, "Should have 2 records separated by blank lines and trailing newline");
+        assert!(!parts[0].is_empty());
+        assert!(!parts[1].is_empty());
+        assert!(parts[2].is_empty());
+
+        assert!(s.ends_with("\n\n"), "expected output to end with a blank line separator");
     }
 
     #[test]

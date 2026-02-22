@@ -1,8 +1,8 @@
 use std::fmt::{Display, Formatter};
 use std::str::FromStr;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum TransactionType {
     #[serde(rename = "DEPOSIT")] Deposit,
     #[serde(rename = "TRANSFER")] Transfer,
@@ -33,7 +33,7 @@ impl Display for TransactionType {
     }
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum TransactionStatus {
     #[serde(rename = "PENDING")] Pending,
     #[serde(rename = "SUCCESS")] Success,
