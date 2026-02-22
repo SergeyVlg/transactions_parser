@@ -1,5 +1,5 @@
 use crate::common::{TransactionStatus, TransactionType};
-use crate::{Readable, Writable};
+use crate::{IsEofError, Readable, Writable};
 use serde::Deserialize;
 use serde_with::{serde_as, DisplayFromStr};
 use std::collections::HashMap;
@@ -45,8 +45,7 @@ enum TextRecordError {
     MissingColonAfterKey,
     ReadLineError(std::io::Error),
     ParseError { error: String },
-    SourceIsEmpty,
-    EmptyLinesAtEndOfFile
+    EndOfFile
 }
 
 impl Display for TextRecordError {
@@ -56,6 +55,12 @@ impl Display for TextRecordError {
 }
 
 impl Error for TextRecordError {}
+
+impl IsEofError for TextRecordError {
+    fn is_eof(&self) -> bool {
+        matches!(self, TextRecordError::EndOfFile)
+    }
+}
 
 impl From<serde::de::value::Error> for TextRecordError {
     fn from(value: serde::de::value::Error) -> Self {
@@ -77,7 +82,7 @@ impl<R: Read> Readable<R, TextRecordError> for YPBankTextRecord {
         if reader.fill_buf()
             .map_err(|e| TextRecordError::ReadLineError(e))?
             .is_empty() {
-            return Err(TextRecordError::SourceIsEmpty)
+            return Err(TextRecordError::EndOfFile)
         }
 
         loop {
@@ -118,7 +123,7 @@ impl<R: Read> Readable<R, TextRecordError> for YPBankTextRecord {
             return Ok(res);
         }
 
-        Err(TextRecordError::EmptyLinesAtEndOfFile)
+        Err(TextRecordError::EndOfFile)
     }
 }
 
@@ -245,6 +250,7 @@ DESCRIPTION: "User transfer"
         assert_eq!(rec.description, "\"User transfer\"");
 
         assert!(parser.next().is_none(), "Should be consumed");
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -298,6 +304,7 @@ DESCRIPTION: "User withdrawal"
         assert_eq!(r2.description, "\"User withdrawal\"");
 
         assert!(parser.next().is_none());
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -326,6 +333,7 @@ DESCRIPTION: "No trailing blank"
         assert_eq!(rec.transaction_status, TransactionStatus::Success);
         assert_eq!(rec.description, "\"No trailing blank\"");
         assert!(parser.next().is_none());
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -405,7 +413,7 @@ DESCRIPTION: "Bad Status"
         let result = parser.next();
 
         assert!(result.is_none());
-        assert!(matches!(parser.read_error.unwrap(), TextRecordError::SourceIsEmpty));
+        assert!(parser.read_error.is_none(), "Expected no read error on empty source, got: {:?}", parser.read_error);
     }
 
     #[test]

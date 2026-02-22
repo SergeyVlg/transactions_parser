@@ -1,6 +1,7 @@
 mod txt_format;
 mod csv_format;
 mod common;
+mod bin_format;
 
 use std::error::Error;
 use std::io::{Read, Write};
@@ -15,14 +16,18 @@ pub trait Readable<Source: Read, E: Error> : Sized {
     fn read(reader: &mut Self::Reader) -> Result<Self, E>;
 }
 
+pub trait IsEofError {
+    fn is_eof(&self) -> bool;
+}
+
 pub struct Parser<TRecord, Source, E>
 where
     TRecord: Readable<Source, E>,
     Source: Read,
-    E: Error,
+    E: Error + IsEofError,
 {
     reader: TRecord::Reader,
-    read_error: Option<E>,
+    pub read_error: Option<E>,
     _marker: PhantomData<Source>,
 }
 
@@ -30,13 +35,14 @@ impl<TRecord, Source, E> Iterator for Parser<TRecord, Source, E>
 where
     TRecord: Readable<Source, E>,
     Source: Read,
-    E: Error,
+    E: Error + IsEofError,
 {
     type Item = Result<TRecord, E>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match TRecord::read(&mut self.reader) {
             Ok(record) => Some(Ok(record)),
+            Err(e) if e.is_eof() => None,
             Err(e) => {
                 self.read_error = Some(e);
                 None
@@ -49,7 +55,7 @@ impl<TRecord, Source, E> Parser<TRecord, Source, E>
 where
     TRecord: Readable<Source, E>,
     Source: Read,
-    E: Error,
+    E: Error + IsEofError,
 {
     pub fn new(source: Source) -> Self {
         let reader = TRecord::build_reader(source);

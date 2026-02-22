@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone)]
 pub enum TransactionType {
     #[serde(rename = "DEPOSIT")] Deposit,
     #[serde(rename = "TRANSFER")] Transfer,
@@ -33,7 +33,28 @@ impl Display for TransactionType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+impl From<u8> for TransactionType {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => TransactionType::Deposit,
+            1 => TransactionType::Transfer,
+            2 => TransactionType::Withdrawal,
+            _ => panic!("Invalid transaction type value: {}", value),
+        }
+    }
+}
+
+impl Into<u8> for TransactionType {
+    fn into(self) -> u8 {
+        match self {
+            TransactionType::Deposit => 0,
+            TransactionType::Transfer => 1,
+            TransactionType::Withdrawal => 2,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone)]
 pub enum TransactionStatus {
     #[serde(rename = "PENDING")] Pending,
     #[serde(rename = "SUCCESS")] Success,
@@ -50,6 +71,27 @@ impl FromStr for TransactionStatus {
             "SUCCESS" => Ok(TransactionStatus::Success),
 
             _ => Err(()),
+        }
+    }
+}
+
+impl From<u8> for TransactionStatus {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => TransactionStatus::Success,
+            1 => TransactionStatus::Failure,
+            2 => TransactionStatus::Pending,
+            _ => panic!("Invalid transaction status value: {}", value),
+        }
+    }
+}
+
+impl Into<u8> for TransactionStatus {
+    fn into(self) -> u8 {
+        match self {
+            TransactionStatus::Success => 0,
+            TransactionStatus::Failure => 1,
+            TransactionStatus::Pending => 2,
         }
     }
 }

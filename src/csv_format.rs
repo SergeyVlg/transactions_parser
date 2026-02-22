@@ -2,7 +2,7 @@ use std::io::{Error, ErrorKind, Read, Write};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use crate::common::{TransactionStatus, TransactionType};
-use crate::{Readable, Writable};
+use crate::{IsEofError, Readable, Writable};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -35,6 +35,12 @@ struct YPBankCsvRecord {
     transaction_status: TransactionStatus,
     #[serde(rename = "DESCRIPTION")]
     description: String
+}
+
+impl IsEofError for Error {
+    fn is_eof(&self) -> bool {
+        matches!(self.kind(), ErrorKind::UnexpectedEof)
+    }
 }
 
 impl<R: Read> Readable<R, Error> for YPBankCsvRecord {
