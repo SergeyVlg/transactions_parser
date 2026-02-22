@@ -1,29 +1,35 @@
 mod txt_format;
+mod csv_format;
+mod common;
 
 use std::error::Error;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 
-pub trait Readable<ReadError: Error> : Sized {
+pub trait Readable<Source: Read, E: Error> : Sized {
+    type Reader: Read;
+
     #[doc(hidden)]
-    fn read<R: BufRead>(reader: &mut R) -> Result<Self, ReadError>;
+    fn build_reader(source: Source) -> Self::Reader;
+    #[doc(hidden)]
+    fn read(reader: &mut Self::Reader) -> Result<Self, E>;
 }
 
-pub struct Parser<TRecord, Reader, E>
+pub struct Parser<TRecord, Source, E>
 where
-    TRecord: Readable<E>,
-    Reader: Read,
+    TRecord: Readable<Source, E>,
+    Source: Read,
     E: Error,
 {
-    reader: BufReader<Reader>,
+    reader: TRecord::Reader,
     read_error: Option<E>,
-    _marker: PhantomData<(TRecord, E)>,
+    _marker: PhantomData<Source>,
 }
 
-impl<TRecord, Reader, E> Iterator for Parser<TRecord, Reader, E>
+impl<TRecord, Source, E> Iterator for Parser<TRecord, Source, E>
 where
-    TRecord: Readable<E>,
-    Reader: Read,
+    TRecord: Readable<Source, E>,
+    Source: Read,
     E: Error,
 {
     type Item = Result<TRecord, E>;
@@ -39,14 +45,14 @@ where
     }
 }
 
-impl<TRecord, Reader, E> Parser<TRecord, Reader, E>
+impl<TRecord, Source, E> Parser<TRecord, Source, E>
 where
-    TRecord: Readable<E>,
-    Reader: Read,
+    TRecord: Readable<Source, E>,
+    Source: Read,
     E: Error,
 {
-    pub fn new(reader: Reader) -> Self {
-        let reader = BufReader::new(reader);
+    pub fn new(source: Source) -> Self {
+        let reader = TRecord::build_reader(source);
 
         Self {
             reader,
@@ -56,9 +62,9 @@ where
     }
 }
 
-pub trait Writable<WriteError: Error> {
+pub trait Writable<E: Error> {
     #[doc(hidden)]
-    fn write<W: Write>(&self, writer: &mut W) -> Result<(), WriteError>;
+    fn write<W: Write>(&self, writer: &mut W) -> Result<(), E>;
 }
 
 pub struct Serializer<TRecord, Writer, E>
