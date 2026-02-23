@@ -68,8 +68,9 @@ impl From<serde::de::value::Error> for TextRecordError {
     }
 }
 
-impl<R: Read> Readable<R, TextRecordError> for YPBankTextRecord {
+impl<R: Read> Readable<R> for YPBankTextRecord {
     type Reader = BufReader<R>;
+    type Error = TextRecordError;
 
     fn build_reader(source: R) -> Self::Reader {
         BufReader::new(source)
@@ -127,12 +128,14 @@ impl<R: Read> Readable<R, TextRecordError> for YPBankTextRecord {
     }
 }
 
-impl Writable<std::io::Error> for YPBankTextRecord {
-    fn write_header<W: Write>(writer: &mut W) -> Result<(), std::io::Error> {
+impl Writable for YPBankTextRecord {
+    type Error = std::io::Error;
+
+    fn write_header<W: Write>(_: &mut W) -> Result<(), Self::Error> {
         Ok(())
     }
 
-    fn write<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    fn write<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error> {
         let mut buff_writer = BufWriter::new(writer);
 
         writeln!(&mut buff_writer, "TX_ID: {}", self.id)?;
@@ -197,7 +200,7 @@ mod tests {
 
         serializer.serialize(&[rec1, rec2]).unwrap();
 
-        let bytes = serializer.into_inner().into_inner();
+        let bytes = serializer.into_inner().into_inner().unwrap().into_inner();
         let s = String::from_utf8(bytes).unwrap();
 
         assert!(s.contains("TX_ID: 1234567890\n"));
@@ -237,7 +240,7 @@ DESCRIPTION: "User transfer"
 "#;
 
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         let rec = parser.next().expect("Should have a record").expect("Should parse successfully");
 
         assert_eq!(rec.id, 2312321321);
@@ -278,7 +281,7 @@ DESCRIPTION: "User withdrawal"
 "#;
 
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
 
         let r1 = parser.next().expect("Should have first record").expect("Should parse first record");
         let r2 = parser.next().expect("Should have second record").expect("Should parse second record");
@@ -321,7 +324,7 @@ DESCRIPTION: "No trailing blank"
 "#;
 
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         let rec = parser.next().expect("Should have one record").expect("Should parse");
 
         assert_eq!(rec.id, 3);
@@ -351,7 +354,7 @@ DESCRIPTION: "x"
 "#;
 
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
         assert!(matches!(parser.read_error.unwrap(), TextRecordError::MissingColonAfterKey));
     }
@@ -370,7 +373,7 @@ STATUS: SUCCESS
 DESCRIPTION: "Negative ID"
 "#;
         let cur = Cursor::new(input_negative_id.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
         assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
 
@@ -385,7 +388,7 @@ STATUS: SUCCESS
 DESCRIPTION: "Bad Amount"
 "#;
         let cur = Cursor::new(input_bad_amount.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
         assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
 
@@ -400,7 +403,7 @@ STATUS: UNKNOWN_STATUS
 DESCRIPTION: "Bad Status"
 "#;
         let cur = Cursor::new(input_bad_status.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
         assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
     }
@@ -409,7 +412,7 @@ DESCRIPTION: "Bad Status"
     fn read_errors_on_empty_source() {
         let input = "";
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         let result = parser.next();
 
         assert!(result.is_none());
@@ -431,7 +434,7 @@ UNKNOWN_FIELD: some_value
 ANOTHER_ONE: 123
 "#;
         let cur = Cursor::new(input.as_bytes());
-        let mut parser = Parser::<YPBankTextRecord, _, _>::new(cur);
+        let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
         assert!(matches!(parser.read_error.unwrap(), TextRecordError::ParseError { .. }));
     }

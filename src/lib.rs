@@ -4,40 +4,39 @@ mod common;
 mod bin_format;
 
 use std::error::Error;
-use std::io::{Read, Write};
+use std::io::{BufWriter, Read, Write};
 use std::marker::PhantomData;
 
-pub trait Readable<Source: Read, E: Error> : Sized {
+pub trait Readable<Source: Read> : Sized {
     type Reader;
+    type Error: Error + IsEofError;
 
     #[doc(hidden)]
     fn build_reader(source: Source) -> Self::Reader;
     #[doc(hidden)]
-    fn read(reader: &mut Self::Reader) -> Result<Self, E>;
+    fn read(reader: &mut Self::Reader) -> Result<Self, Self::Error>;
 }
 
 pub trait IsEofError {
     fn is_eof(&self) -> bool;
 }
 
-pub struct Parser<TRecord, Source, E>
+pub struct Parser<TRecord, Source>
 where
-    TRecord: Readable<Source, E>,
-    Source: Read,
-    E: Error + IsEofError,
+    TRecord: Readable<Source>,
+    Source: Read
 {
     reader: TRecord::Reader,
-    pub read_error: Option<E>,
+    pub read_error: Option<TRecord::Error>,
     _marker: PhantomData<Source>,
 }
 
-impl<TRecord, Source, E> Iterator for Parser<TRecord, Source, E>
+impl<TRecord, Source> Iterator for Parser<TRecord, Source>
 where
-    TRecord: Readable<Source, E>,
+    TRecord: Readable<Source>,
     Source: Read,
-    E: Error + IsEofError,
 {
-    type Item = Result<TRecord, E>;
+    type Item = Result<TRecord, TRecord::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match TRecord::read(&mut self.reader) {
@@ -51,11 +50,10 @@ where
     }
 }
 
-impl<TRecord, Source, E> Parser<TRecord, Source, E>
+impl<TRecord, Source> Parser<TRecord, Source>
 where
-    TRecord: Readable<Source, E>,
-    Source: Read,
-    E: Error + IsEofError,
+    TRecord: Readable<Source>,
+    Source: Read
 {
     pub fn new(source: Source) -> Self {
         let reader = TRecord::build_reader(source);
@@ -68,49 +66,52 @@ where
     }
 }
 
-pub trait Writable<E: Error> {
-    #[doc(hidden)]
-    fn write_header<W: Write>(writer: &mut W) -> Result<(), E>;
+pub trait Writable {
+    type Error: Error + From<std::io::Error>;
 
     #[doc(hidden)]
-    fn write<W: Write>(&self, writer: &mut W) -> Result<(), E>;
+    fn write_header<W: Write>(writer: &mut W) -> Result<(), Self::Error>;
+
+    #[doc(hidden)]
+    fn write<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
 }
 
-pub struct Serializer<TRecord, Target, E>
+pub struct Serializer<TRecord, Target>
 where
-    TRecord: Writable<E>,
+    TRecord: Writable,
     Target: Write,
-    E: Error,
 {
-    target: Target,
-    _marker: PhantomData<(TRecord, E)>,
+    target: BufWriter<Target>,
+    _marker: PhantomData<TRecord>,
 }
 
-impl<TRecord, Target, E> Serializer<TRecord, Target, E>
+impl<TRecord, Target> Serializer<TRecord, Target>
 where
-    TRecord: Writable<E>,
-    Target: Write,
-    E: Error,
+    TRecord: Writable,
+    Target: Write
 {
     pub fn new(target: Target) -> Self {
+        let buffered_target = BufWriter::new(target);
         Self {
-            target,
+            target: buffered_target,
             _marker: PhantomData,
         }
     }
 
-    pub fn serialize(&mut self, records: &[TRecord]) -> Result<(), E> {
+    pub fn serialize(&mut self, records: &[TRecord]) -> Result<(), TRecord::Error>{
         TRecord::write_header(&mut self.target)?;
 
         for record in records {
             record.write(&mut self.target)?;
         }
 
+        self.target.flush()?;
+
         Ok(())
     }
 
     #[cfg(test)]
-    pub fn into_inner(self) -> Target {
+    pub fn into_inner(self) -> BufWriter<Target> {
         self.target
     }
 }

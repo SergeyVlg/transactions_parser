@@ -14,8 +14,9 @@ struct YPBankBinRecord {
     description: String
 }
 
-impl<R: Read> Readable<R, Error> for YPBankBinRecord {
+impl<R: Read> Readable<R> for YPBankBinRecord {
     type Reader = BufReader<R>;
+    type Error = Error;
 
     fn build_reader(source: R) -> Self::Reader {
         BufReader::new(source)
@@ -91,7 +92,9 @@ impl<R: Read> Readable<R, Error> for YPBankBinRecord {
     }
 }
 
-impl Writable<Error> for YPBankBinRecord {
+impl Writable for YPBankBinRecord {
+    type Error = Error;
+
     fn write_header<W: Write>(_: &mut W) -> Result<(), Error> {
         Ok(())
     }
@@ -149,7 +152,7 @@ mod tests {
 
         serializer.serialize(&[sample_record()]).unwrap();
 
-        let buffer = serializer.into_inner().into_inner();
+        let buffer = serializer.into_inner().into_inner().unwrap().into_inner();
 
         assert_eq!(&buffer[0..4], b"YPBN");
 
@@ -183,7 +186,7 @@ mod tests {
         original_record.write(&mut buffer).unwrap();
 
         let cursor = Cursor::new(buffer);
-        let mut parser = Parser::<YPBankBinRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
         let read_record = parser.next().expect("Should return a record").expect("Should be Ok");
 
@@ -201,7 +204,7 @@ mod tests {
         buffer[0] = b'X'; //break magic bytes
 
         let cursor = Cursor::new(buffer);
-        let mut parser = Parser::<YPBankBinRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
         let result = parser.next();
         assert!(result.is_none());
@@ -223,7 +226,7 @@ mod tests {
         let truncated_buffer = &buffer[..truncated_len];
 
         let cursor = Cursor::new(truncated_buffer);
-        let mut parser = Parser::<YPBankBinRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
         let result = parser.next();
         assert!(result.is_none());
@@ -250,7 +253,7 @@ mod tests {
 
         serializer.serialize(&[sample_record(), record2]).unwrap();
 
-        let buffer = serializer.into_inner().into_inner();
+        let buffer = serializer.into_inner().into_inner().unwrap().into_inner();
         assert_eq!(&buffer[0..4], b"YPBN");
 
         let size1 = u32::from_be_bytes(buffer[4..8].try_into().unwrap());
@@ -292,7 +295,7 @@ mod tests {
         record2.write(&mut buffer).unwrap();
 
         let cursor = Cursor::new(buffer);
-        let mut parser = Parser::<YPBankBinRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
         let read_r1 = parser.next().expect("First record").expect("Ok");
         assert_eq!(read_r1, record1);

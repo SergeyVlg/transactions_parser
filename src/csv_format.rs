@@ -43,8 +43,9 @@ impl IsEofError for Error {
     }
 }
 
-impl<R: Read> Readable<R, Error> for YPBankCsvRecord {
+impl<R: Read> Readable<R> for YPBankCsvRecord {
     type Reader = csv::Reader<R>;
+    type Error = Error;
 
     fn build_reader(source: R) -> Self::Reader {
         csv::ReaderBuilder::new()
@@ -63,7 +64,9 @@ impl<R: Read> Readable<R, Error> for YPBankCsvRecord {
     }
 }
 
-impl Writable<Error> for YPBankCsvRecord {
+impl Writable for YPBankCsvRecord {
+    type Error = Error;
+
     fn write_header<W: Write>(writer: &mut W) -> Result<(), Error> {
         writer.write_all(b"TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION\n")
     }
@@ -112,7 +115,7 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 1001,DEPOSIT,0,501,50000,1672531200000,SUCCESS,\"Initial account funding\"
 ";
         let cursor = Cursor::new(csv_data);
-        let mut parser = Parser::<YPBankCsvRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankCsvRecord, _>::new(cursor);
 
         let record = parser.next()
             .expect("Should have a record")
@@ -130,7 +133,7 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 2,WITHDRAWAL,10,0,50,2000,PENDING,\"Desc 2\"
 ";
         let cursor = Cursor::new(csv_data);
-        let mut parser = Parser::<YPBankCsvRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankCsvRecord, _>::new(cursor);
 
         let r1 = parser.next().unwrap().unwrap();
         assert_eq!(r1.id, 1);
@@ -162,7 +165,7 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 NOT_A_NUMBER,DEPOSIT,0,501,50000,1672531200000,SUCCESS,\"Bad ID\"
 ";
         let cursor = Cursor::new(csv_data);
-        let mut parser = Parser::<YPBankCsvRecord, _, _>::new(cursor);
+        let mut parser = Parser::<YPBankCsvRecord, _>::new(cursor);
 
         // Parser returns None on error, and stores error in read_error
         assert!(parser.next().is_none());
@@ -193,7 +196,7 @@ NOT_A_NUMBER,DEPOSIT,0,501,50000,1672531200000,SUCCESS,\"Bad ID\"
 
         serializer.serialize(&[record1, record2]).unwrap();
 
-        let bytes = serializer.into_inner().into_inner();
+        let bytes = serializer.into_inner().into_inner().unwrap().into_inner();
         let output = String::from_utf8(bytes).unwrap();
         let expected = "\
 TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
