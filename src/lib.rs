@@ -1,15 +1,20 @@
+mod common;
 mod txt_format;
 mod csv_format;
-mod common;
 mod bin_format;
 
 use std::error::Error;
 use std::io::{BufWriter, Read, Write};
 use std::marker::PhantomData;
 
-pub trait Readable<Source: Read> : Sized {
+pub use txt_format::{YPBankTextRecord};
+pub use csv_format::{YPBankCsvRecord};
+pub use bin_format::{YPBankBinRecord};
+use crate::common::Transaction;
+
+pub trait Readable<Source: Read> : Sized + Into<Transaction> {
     type Reader;
-    type Error: Error + IsEofError;
+    type Error: Error + IsEofError + From<std::io::Error>;
 
     #[doc(hidden)]
     fn build_reader(source: Source) -> Self::Reader;
@@ -17,7 +22,7 @@ pub trait Readable<Source: Read> : Sized {
     fn read(reader: &mut Self::Reader) -> Result<Self, Self::Error>;
 }
 
-pub trait IsEofError {
+trait IsEofError {
     fn is_eof(&self) -> bool;
 }
 
@@ -36,11 +41,13 @@ where
     TRecord: Readable<Source>,
     Source: Read,
 {
-    type Item = Result<TRecord, TRecord::Error>;
+    //type Item = Result<TRecord, TRecord::Error>;
+    type Item = TRecord;
 
+    // может сделать Item обычным TRecord, а ошибку сохранять в поле read_error?
     fn next(&mut self) -> Option<Self::Item> {
         match TRecord::read(&mut self.reader) {
-            Ok(record) => Some(Ok(record)),
+            Ok(record) => Some(record),
             Err(e) if e.is_eof() => None,
             Err(e) => {
                 self.read_error = Some(e);
@@ -66,7 +73,7 @@ where
     }
 }
 
-pub trait Writable {
+pub trait Writable: From<Transaction> {
     type Error: Error + From<std::io::Error>;
 
     #[doc(hidden)]
@@ -98,7 +105,9 @@ where
         }
     }
 
-    pub fn serialize(&mut self, records: &[TRecord]) -> Result<(), TRecord::Error>{
+    pub fn serialize<I>(&mut self, records: I) -> Result<(), TRecord::Error>
+    where I : IntoIterator<Item = TRecord>,
+    {
         TRecord::write_header(&mut self.target)?;
 
         for record in records {

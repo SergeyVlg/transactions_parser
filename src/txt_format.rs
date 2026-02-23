@@ -1,4 +1,4 @@
-use crate::common::{TransactionStatus, TransactionType};
+use crate::common::{Transaction, TransactionStatus, TransactionType};
 use crate::{IsEofError, Readable, Writable};
 use serde::Deserialize;
 use serde_with::{serde_as, DisplayFromStr};
@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 #[serde_as]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct YPBankTextRecord {
+pub struct YPBankTextRecord {
     #[serde(rename = "TX_ID")]
     #[serde_as(as = "DisplayFromStr")]
     id: u32,
@@ -45,7 +45,7 @@ enum TextRecordError {
     MissingColonAfterKey,
     ReadLineError(std::io::Error),
     ParseError { error: String },
-    EndOfFile
+    EndOfFile,
 }
 
 impl Display for TextRecordError {
@@ -62,10 +62,24 @@ impl IsEofError for TextRecordError {
     }
 }
 
+impl From<std::io::Error> for TextRecordError {
+    fn from(value: std::io::Error) -> Self {
+        TextRecordError::ReadLineError(value)
+    }
+}
+
 impl From<serde::de::value::Error> for TextRecordError {
     fn from(value: serde::de::value::Error) -> Self {
         TextRecordError::ParseError { error: value.to_string() }
     }
+}
+
+impl Into<Transaction> for YPBankTextRecord {
+    //todo()
+}
+
+impl From<Transaction> for YPBankTextRecord {
+    //todo()
 }
 
 impl<R: Read> Readable<R> for YPBankTextRecord {
@@ -198,7 +212,7 @@ mod tests {
         let writer = Cursor::new(Vec::<u8>::new());
         let mut serializer = Serializer::new(writer);
 
-        serializer.serialize(&[rec1, rec2]).unwrap();
+        serializer.serialize(vec![rec1, rec2]).unwrap();
 
         let bytes = serializer.into_inner().into_inner().unwrap().into_inner();
         let s = String::from_utf8(bytes).unwrap();
@@ -241,7 +255,10 @@ DESCRIPTION: "User transfer"
 
         let cur = Cursor::new(input.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
-        let rec = parser.next().expect("Should have a record").expect("Should parse successfully");
+        let rec = parser.next().expect("Should have a record");
+
+        assert!(parser.next().is_none(), "Should be consumed");
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
 
         assert_eq!(rec.id, 2312321321);
         assert_eq!(rec.transaction_type, TransactionType::Transfer);
@@ -252,8 +269,6 @@ DESCRIPTION: "User transfer"
         assert_eq!(rec.transaction_status, TransactionStatus::Failure);
         assert_eq!(rec.description, "\"User transfer\"");
 
-        assert!(parser.next().is_none(), "Should be consumed");
-        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -283,8 +298,11 @@ DESCRIPTION: "User withdrawal"
         let cur = Cursor::new(input.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
 
-        let r1 = parser.next().expect("Should have first record").expect("Should parse first record");
-        let r2 = parser.next().expect("Should have second record").expect("Should parse second record");
+        let r1 = parser.next().expect("Should have first record");
+        let r2 = parser.next().expect("Should have second record");
+
+        assert!(parser.next().is_none());
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
 
         // Record 1
         assert_eq!(r1.id, 1);
@@ -305,9 +323,6 @@ DESCRIPTION: "User withdrawal"
         assert_eq!(r2.timestamp, 2);
         assert_eq!(r2.transaction_status, TransactionStatus::Pending);
         assert_eq!(r2.description, "\"User withdrawal\"");
-
-        assert!(parser.next().is_none());
-        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -325,7 +340,10 @@ DESCRIPTION: "No trailing blank"
 
         let cur = Cursor::new(input.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
-        let rec = parser.next().expect("Should have one record").expect("Should parse");
+        let rec = parser.next().expect("Should have one record");
+
+        assert!(parser.next().is_none());
+        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
 
         assert_eq!(rec.id, 3);
         assert_eq!(rec.transaction_type, TransactionType::Transfer);
@@ -335,8 +353,6 @@ DESCRIPTION: "No trailing blank"
         assert_eq!(rec.timestamp, 3);
         assert_eq!(rec.transaction_status, TransactionStatus::Success);
         assert_eq!(rec.description, "\"No trailing blank\"");
-        assert!(parser.next().is_none());
-        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]

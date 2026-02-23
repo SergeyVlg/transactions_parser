@@ -1,13 +1,13 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use crate::common::{TransactionStatus, TransactionType};
-use crate::{IsEofError, Readable, Writable};
+use crate::common::{Transaction, TransactionStatus, TransactionType};
+use crate::{IsEofError, Readable, Writable, YPBankTextRecord};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-struct YPBankCsvRecord {
+pub struct YPBankCsvRecord {
     #[serde(rename = "TX_ID")]
     #[serde_as(as = "DisplayFromStr")]
     id: u32,
@@ -41,6 +41,14 @@ impl IsEofError for Error {
     fn is_eof(&self) -> bool {
         matches!(self.kind(), ErrorKind::UnexpectedEof)
     }
+}
+
+impl Into<Transaction> for YPBankTextRecord {
+    //todo()
+}
+
+impl From<Transaction> for YPBankTextRecord {
+    //todo()
 }
 
 impl<R: Read> Readable<R> for YPBankCsvRecord {
@@ -117,12 +125,10 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
         let cursor = Cursor::new(csv_data);
         let mut parser = Parser::<YPBankCsvRecord, _>::new(cursor);
 
-        let record = parser.next()
-            .expect("Should have a record")
-            .expect("Should parse successfully");
+        let record = parser.next().expect("Should have a record");
 
         assert_eq!(record, sample_record());
-        assert!(parser.next().is_none());
+        assert!(parser.next().is_none(), "Read error: {}", parser.read_error.unwrap());
     }
 
     #[test]
@@ -135,7 +141,7 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
         let cursor = Cursor::new(csv_data);
         let mut parser = Parser::<YPBankCsvRecord, _>::new(cursor);
 
-        let r1 = parser.next().unwrap().unwrap();
+        let r1 = parser.next().unwrap();
         assert_eq!(r1.id, 1);
         assert_eq!(r1.transaction_type, TransactionType::Deposit);
         assert_eq!(r1.from_user_id, 0);
@@ -145,7 +151,7 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
         assert_eq!(r1.transaction_status, TransactionStatus::Success);
         assert_eq!(r1.description, "Desc 1");
 
-        let r2 = parser.next().unwrap().unwrap();
+        let r2 = parser.next().unwrap();
         assert_eq!(r2.id, 2);
         assert_eq!(r2.transaction_type, TransactionType::Withdrawal);
         assert_eq!(r2.from_user_id, 10);
@@ -194,7 +200,7 @@ NOT_A_NUMBER,DEPOSIT,0,501,50000,1672531200000,SUCCESS,\"Bad ID\"
         let writer = Cursor::new(Vec::<u8>::new());
         let mut serializer = Serializer::new(writer);
 
-        serializer.serialize(&[record1, record2]).unwrap();
+        serializer.serialize(vec![record1, record2]).unwrap();
 
         let bytes = serializer.into_inner().into_inner().unwrap().into_inner();
         let output = String::from_utf8(bytes).unwrap();

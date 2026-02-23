@@ -1,9 +1,9 @@
 use std::io::{BufReader, Error, ErrorKind, Read, Write};
-use crate::common::{TransactionStatus, TransactionType};
-use crate::{Readable, Writable};
+use crate::common::{Transaction, TransactionStatus, TransactionType};
+use crate::{Readable, Writable, YPBankTextRecord};
 
 #[derive(Debug, PartialEq)]
-struct YPBankBinRecord {
+pub struct YPBankBinRecord {
     id: u64,
     transaction_type: TransactionType,
     from_user_id: u64,
@@ -12,6 +12,14 @@ struct YPBankBinRecord {
     timestamp: u64,
     transaction_status: TransactionStatus,
     description: String
+}
+
+impl Into<Transaction> for YPBankTextRecord {
+    //todo()
+}
+
+impl From<Transaction> for YPBankTextRecord {
+    //todo()
 }
 
 impl<R: Read> Readable<R> for YPBankBinRecord {
@@ -150,7 +158,7 @@ mod tests {
         let writer = Cursor::new(Vec::new());
         let mut serializer = Serializer::new(writer);
 
-        serializer.serialize(&[sample_record()]).unwrap();
+        serializer.serialize(vec![sample_record()]).unwrap();
 
         let buffer = serializer.into_inner().into_inner().unwrap().into_inner();
 
@@ -188,11 +196,11 @@ mod tests {
         let cursor = Cursor::new(buffer);
         let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
-        let read_record = parser.next().expect("Should return a record").expect("Should be Ok");
-
-        assert_eq!(read_record, original_record);
+        let read_record = parser.next().expect("Should return a record");
         assert!(parser.next().is_none());
         assert!(parser.read_error.is_none(), "Expected no read error, got: {:?}", parser.read_error);
+
+        assert_eq!(read_record, original_record);
     }
 
     #[test]
@@ -251,7 +259,7 @@ mod tests {
         let mut serializer = Serializer::new(writer);
         let record2_id = record2.id;
 
-        serializer.serialize(&[sample_record(), record2]).unwrap();
+        serializer.serialize(vec![sample_record(), record2]).unwrap();
 
         let buffer = serializer.into_inner().into_inner().unwrap().into_inner();
         assert_eq!(&buffer[0..4], b"YPBN");
@@ -297,10 +305,10 @@ mod tests {
         let cursor = Cursor::new(buffer);
         let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
 
-        let read_r1 = parser.next().expect("First record").expect("Ok");
+        let read_r1 = parser.next().expect("First record expected");
         assert_eq!(read_r1, record1);
 
-        let read_r2 = parser.next().expect("Second record").expect("Ok");
+        let read_r2 = parser.next().expect("Second record expected");
         assert_eq!(read_r2, record2);
 
         assert!(parser.next().is_none());
