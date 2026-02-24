@@ -10,11 +10,11 @@ use std::marker::PhantomData;
 pub use txt_format::{YPBankTextRecord};
 pub use csv_format::{YPBankCsvRecord};
 pub use bin_format::{YPBankBinRecord};
-use crate::common::Transaction;
+pub use common::Transaction;
 
 pub trait Readable<Source: Read> : Sized + Into<Transaction> {
     type Reader;
-    type Error: Error + IsEofError + From<std::io::Error>;
+    type Error: Error + IsEofError + From<std::io::Error> + Into<std::io::Error>;
 
     #[doc(hidden)]
     fn build_reader(source: Source) -> Self::Reader;
@@ -22,7 +22,7 @@ pub trait Readable<Source: Read> : Sized + Into<Transaction> {
     fn read(reader: &mut Self::Reader) -> Result<Self, Self::Error>;
 }
 
-trait IsEofError {
+pub trait IsEofError {
     fn is_eof(&self) -> bool;
 }
 
@@ -74,7 +74,7 @@ where
 }
 
 pub trait Writable: From<Transaction> {
-    type Error: Error + From<std::io::Error>;
+    type Error: Error + From<std::io::Error> + Into<std::io::Error>;
 
     #[doc(hidden)]
     fn write_header<W: Write>(writer: &mut W) -> Result<(), Self::Error>;

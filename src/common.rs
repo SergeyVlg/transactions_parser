@@ -108,11 +108,11 @@ impl Display for TransactionStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Transaction {
-    pub id: u32,
+    pub id: u64,
     pub transaction_type: TransactionType,
-    pub from_user_id: u32,
-    pub to_user_id: u32,
-    pub amount: u64,
+    pub from_user_id: u64,
+    pub to_user_id: u64,
+    pub amount: i64,
     pub timestamp: u64,
     pub transaction_status: TransactionStatus,
     pub description: String,

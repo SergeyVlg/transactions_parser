@@ -1,8 +1,8 @@
-use std::io::{Error, ErrorKind, Read, Write};
+use crate::common::{Transaction, TransactionStatus, TransactionType};
+use crate::{IsEofError, Readable, Writable};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use crate::common::{Transaction, TransactionStatus, TransactionType};
-use crate::{IsEofError, Readable, Writable, YPBankTextRecord};
+use std::io::{Error, ErrorKind, Read, Write};
 
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
@@ -10,18 +10,18 @@ use crate::{IsEofError, Readable, Writable, YPBankTextRecord};
 pub struct YPBankCsvRecord {
     #[serde(rename = "TX_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    id: u32,
+    id: u64,
 
     #[serde(rename = "TX_TYPE")]
     transaction_type: TransactionType,
 
     #[serde(rename = "FROM_USER_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    from_user_id: u32,
+    from_user_id: u64,
 
     #[serde(rename = "TO_USER_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    to_user_id: u32,
+    to_user_id: u64,
 
     #[serde(rename = "AMOUNT")]
     #[serde_as(as = "DisplayFromStr")]
@@ -43,12 +43,34 @@ impl IsEofError for Error {
     }
 }
 
-impl Into<Transaction> for YPBankTextRecord {
-    //todo()
+impl Into<Transaction> for YPBankCsvRecord {
+    fn into(self) -> Transaction {
+        Transaction {
+            id: self.id,
+            transaction_type: self.transaction_type,
+            from_user_id: self.from_user_id,
+            to_user_id: self.to_user_id,
+            amount: self.amount as i64,
+            timestamp: self.timestamp,
+            transaction_status: self.transaction_status,
+            description: self.description,
+        }
+    }
 }
 
-impl From<Transaction> for YPBankTextRecord {
-    //todo()
+impl From<Transaction> for YPBankCsvRecord {
+    fn from(value: Transaction) -> Self {
+        YPBankCsvRecord {
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount as u64,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
+        }
+    }
 }
 
 impl<R: Read> Readable<R> for YPBankCsvRecord {
@@ -100,8 +122,8 @@ impl Writable for YPBankCsvRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use crate::{Parser, Serializer};
+    use std::io::Cursor;
 
     fn sample_record() -> YPBankCsvRecord {
         YPBankCsvRecord {

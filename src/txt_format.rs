@@ -13,18 +13,18 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 pub struct YPBankTextRecord {
     #[serde(rename = "TX_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    id: u32,
+    id: u64,
 
     #[serde(rename = "TX_TYPE")]
     transaction_type: TransactionType,
 
     #[serde(rename = "FROM_USER_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    from_user_id: u32,
+    from_user_id: u64,
 
     #[serde(rename = "TO_USER_ID")]
     #[serde_as(as = "DisplayFromStr")]
-    to_user_id: u32,
+    to_user_id: u64,
 
     #[serde(rename = "AMOUNT")]
     #[serde_as(as = "DisplayFromStr")]
@@ -41,7 +41,7 @@ pub struct YPBankTextRecord {
 }
 
 #[derive(Debug)]
-enum TextRecordError {
+pub enum TextRecordError {
     MissingColonAfterKey,
     ReadLineError(std::io::Error),
     ParseError { error: String },
@@ -74,12 +74,40 @@ impl From<serde::de::value::Error> for TextRecordError {
     }
 }
 
+impl From<TextRecordError> for std::io::Error {
+    fn from(value: TextRecordError) -> Self {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, value)
+    }
+}
+
 impl Into<Transaction> for YPBankTextRecord {
-    //todo()
+    fn into(self) -> Transaction {
+        Transaction {
+            id: self.id,
+            transaction_type: self.transaction_type,
+            from_user_id: self.from_user_id,
+            to_user_id: self.to_user_id,
+            amount: self.amount as i64,
+            timestamp: self.timestamp,
+            transaction_status: self.transaction_status,
+            description: self.description,
+        }
+    }
 }
 
 impl From<Transaction> for YPBankTextRecord {
-    //todo()
+    fn from(value: Transaction) -> Self {
+        YPBankTextRecord {
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount as u64,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
+        }
+    }
 }
 
 impl<R: Read> Readable<R> for YPBankTextRecord {
@@ -100,6 +128,7 @@ impl<R: Read> Readable<R> for YPBankTextRecord {
             return Err(TextRecordError::EndOfFile)
         }
 
+        //todo refactor
         loop {
             match reader.read_line(&mut line_buf) {
                 Ok(0) => break, //EOF
@@ -122,7 +151,7 @@ impl<R: Read> Readable<R> for YPBankTextRecord {
                             .split_once(':')
                             .ok_or(TextRecordError::MissingColonAfterKey)?;
 
-                        kv_pairs.insert(k.trim().to_owned(), v.trim().to_owned());
+                        kv_pairs.insert(k.trim().to_owned(), v.trim().trim_matches('"').to_owned());
                     }
 
                     line_buf.clear()
@@ -161,7 +190,7 @@ impl Writable for YPBankTextRecord {
         writeln!(&mut buff_writer, "TIMESTAMP: {}", self.timestamp)?;
 
         writeln!(&mut buff_writer, "STATUS: {}", self.transaction_status)?;
-        writeln!(&mut buff_writer, "DESCRIPTION: {}", self.description)?;
+        writeln!(&mut buff_writer, "DESCRIPTION: \"{}\"", self.description)?;
         writeln!(&mut buff_writer)?; // пустая строка как разделитель
         buff_writer.flush()?;
         Ok(())

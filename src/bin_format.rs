@@ -1,6 +1,6 @@
-use std::io::{BufReader, Error, ErrorKind, Read, Write};
 use crate::common::{Transaction, TransactionStatus, TransactionType};
-use crate::{Readable, Writable, YPBankTextRecord};
+use crate::{Readable, Writable};
+use std::io::{BufReader, Error, ErrorKind, Read, Write};
 
 #[derive(Debug, PartialEq)]
 pub struct YPBankBinRecord {
@@ -14,12 +14,34 @@ pub struct YPBankBinRecord {
     description: String
 }
 
-impl Into<Transaction> for YPBankTextRecord {
-    //todo()
+impl Into<Transaction> for YPBankBinRecord {
+    fn into(self) -> Transaction {
+        Transaction {
+            id: self.id,
+            transaction_type: self.transaction_type,
+            from_user_id: self.from_user_id,
+            to_user_id: self.to_user_id,
+            amount: self.amount,
+            timestamp: self.timestamp,
+            transaction_status: self.transaction_status,
+            description: self.description,
+        }
+    }
 }
 
-impl From<Transaction> for YPBankTextRecord {
-    //todo()
+impl From<Transaction> for YPBankBinRecord {
+    fn from(value: Transaction) -> Self {
+        YPBankBinRecord {
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
+        }
+    }
 }
 
 impl<R: Read> Readable<R> for YPBankBinRecord {
