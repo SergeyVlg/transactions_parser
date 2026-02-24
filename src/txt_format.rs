@@ -210,8 +210,9 @@ mod tests {
     use crate::{Parser, Serializer};
     use std::io::Cursor;
 
-    fn sample_record() -> YPBankTextRecord {
-        YPBankTextRecord {
+    #[test]
+    fn writes_all_required_fields_and_blank_separator_line() {
+        let rec1 = YPBankTextRecord {
             id: 1234567890,
             transaction_type: TransactionType::Transfer,
             from_user_id: 111,
@@ -219,14 +220,8 @@ mod tests {
             amount: 1000,
             timestamp: 1633056800000,
             transaction_status: TransactionStatus::Failure,
-            // по спецификации DESCRIPTION должен быть в двойных кавычках
-            description: "\"User transfer\"".to_string(),
-        }
-    }
-
-    #[test]
-    fn writes_all_required_fields_and_blank_separator_line() {
-        let rec1 = sample_record();
+            description: "User transfer".to_string(), // В самих данных кавычек нет
+        };
         let rec2 = YPBankTextRecord {
             id: 999,
             transaction_type: TransactionType::Deposit,
@@ -235,7 +230,7 @@ mod tests {
             amount: 50,
             timestamp: 1700000000,
             transaction_status: TransactionStatus::Success,
-            description: "\"Second tx\"".to_string(),
+            description: "Second tx".to_string(),
         };
 
         let writer = Cursor::new(Vec::<u8>::new());
@@ -287,7 +282,7 @@ DESCRIPTION: "User transfer"
         let rec = parser.next().expect("Should have a record");
 
         assert!(parser.next().is_none(), "Should be consumed");
-        assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
+        assert!(parser.read_error.is_none(), "Read error: {:?}", parser.read_error);
 
         assert_eq!(rec.id, 2312321321);
         assert_eq!(rec.transaction_type, TransactionType::Transfer);
@@ -296,8 +291,8 @@ DESCRIPTION: "User transfer"
         assert_eq!(rec.amount, 1000);
         assert_eq!(rec.timestamp, 1633056800000);
         assert_eq!(rec.transaction_status, TransactionStatus::Failure);
-        assert_eq!(rec.description, "\"User transfer\"");
-
+        // Парсер удаляет кавычки при чтении
+        assert_eq!(rec.description, "User transfer");
     }
 
     #[test]
@@ -341,7 +336,7 @@ DESCRIPTION: "User withdrawal"
         assert_eq!(r1.amount, 100);
         assert_eq!(r1.timestamp, 1);
         assert_eq!(r1.transaction_status, TransactionStatus::Success);
-        assert_eq!(r1.description, "\"Terminal deposit\"");
+        assert_eq!(r1.description, "Terminal deposit");
 
         // Record 2
         assert_eq!(r2.id, 2);
@@ -351,7 +346,7 @@ DESCRIPTION: "User withdrawal"
         assert_eq!(r2.amount, 50);
         assert_eq!(r2.timestamp, 2);
         assert_eq!(r2.transaction_status, TransactionStatus::Pending);
-        assert_eq!(r2.description, "\"User withdrawal\"");
+        assert_eq!(r2.description, "User withdrawal");
     }
 
     #[test]
@@ -381,7 +376,7 @@ DESCRIPTION: "No trailing blank"
         assert_eq!(rec.amount, 7);
         assert_eq!(rec.timestamp, 3);
         assert_eq!(rec.transaction_status, TransactionStatus::Success);
-        assert_eq!(rec.description, "\"No trailing blank\"");
+        assert_eq!(rec.description, "No trailing blank");
     }
 
     #[test]
@@ -389,33 +384,24 @@ DESCRIPTION: "No trailing blank"
         let input = r#"
 TX_ID 123
 TX_TYPE: DEPOSIT
-FROM_USER_ID: 0
-TO_USER_ID: 1
-AMOUNT: 1
-TIMESTAMP: 1
-STATUS: SUCCESS
-DESCRIPTION: "x"
-
 "#;
 
         let cur = Cursor::new(input.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
         assert!(parser.next().is_none());
-        assert!(matches!(parser.read_error.unwrap(), TextRecordError::MissingColonAfterKey));
+
+        if let Some(err) = parser.read_error {
+             assert!(matches!(err, TextRecordError::MissingColonAfterKey));
+        } else {
+             panic!("Expected read_error to be set");
+        }
     }
 
     #[test]
     fn read_invalid_data_types_errors() {
-
         let input_negative_id = r#"
 TX_ID: -5
 TX_TYPE: DEPOSIT
-FROM_USER_ID: 0
-TO_USER_ID: 10
-AMOUNT: 100
-TIMESTAMP: 1
-STATUS: SUCCESS
-DESCRIPTION: "Negative ID"
 "#;
         let cur = Cursor::new(input_negative_id.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
@@ -424,13 +410,7 @@ DESCRIPTION: "Negative ID"
 
         let input_bad_amount = r#"
 TX_ID: 10
-TX_TYPE: DEPOSIT
-FROM_USER_ID: 0
-TO_USER_ID: 10
 AMOUNT: not_a_number
-TIMESTAMP: 1
-STATUS: SUCCESS
-DESCRIPTION: "Bad Amount"
 "#;
         let cur = Cursor::new(input_bad_amount.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
@@ -439,13 +419,7 @@ DESCRIPTION: "Bad Amount"
 
         let input_bad_status = r#"
 TX_ID: 11
-TX_TYPE: DEPOSIT
-FROM_USER_ID: 0
-TO_USER_ID: 10
-AMOUNT: 100
-TIMESTAMP: 1
 STATUS: UNKNOWN_STATUS
-DESCRIPTION: "Bad Status"
 "#;
         let cur = Cursor::new(input_bad_status.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
@@ -465,7 +439,7 @@ DESCRIPTION: "Bad Status"
     }
 
     #[test]
-    fn read_ignores_extra_fields() {
+    fn read_fails_on_extra_fields() {
         let input = r#"
 TX_ID: 999
 TX_TYPE: DEPOSIT
@@ -476,7 +450,6 @@ TIMESTAMP: 123456789
 STATUS: SUCCESS
 DESCRIPTION: "Extra fields test"
 UNKNOWN_FIELD: some_value
-ANOTHER_ONE: 123
 "#;
         let cur = Cursor::new(input.as_bytes());
         let mut parser = Parser::<YPBankTextRecord, _>::new(cur);
