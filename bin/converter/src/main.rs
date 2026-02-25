@@ -14,10 +14,7 @@ struct Args {
     input_format: String,
 
     #[arg(long)]
-    output_format: String,
-
-    #[arg(long)]
-    output: String,
+    output_format: String
 }
 
 fn main() -> std::io::Result<()> {
@@ -29,20 +26,16 @@ fn main() -> std::io::Result<()> {
         return Err(Error::new(ErrorKind::InvalidInput, "Input and output formats are the same"));
     }
 
-    if args.output.is_empty() {
-        return Err(Error::new(ErrorKind::InvalidInput, "Output path is empty"));
-    }
-
     let input_file = File::open(args.input)?;
-    let output_file = File::create(args.output)?;
+    let output = std::io::stdout();
 
     match (args.input_format.as_str(), args.output_format.as_str()) {
-        ("txt", "csv") => convert_and_save::<YPBankTextRecord, YPBankCsvRecord, _, _>(input_file, output_file),
-        ("txt", "bin") => convert_and_save::<YPBankTextRecord, YPBankBinRecord, _, _>(input_file, output_file),
-        ("csv", "txt") => convert_and_save::<YPBankCsvRecord, YPBankTextRecord, _, _>(input_file, output_file),
-        ("csv", "bin") => convert_and_save::<YPBankCsvRecord, YPBankBinRecord, _, _>(input_file, output_file),
-        ("bin", "txt") => convert_and_save::<YPBankBinRecord, YPBankTextRecord, _, _>(input_file, output_file),
-        ("bin", "csv") => convert_and_save::<YPBankBinRecord, YPBankCsvRecord, _, _>(input_file, output_file),
+        ("txt", "csv") => convert_and_save::<YPBankTextRecord, YPBankCsvRecord, _, _>(input_file, output),
+        ("txt", "bin") => convert_and_save::<YPBankTextRecord, YPBankBinRecord, _, _>(input_file, output),
+        ("csv", "txt") => convert_and_save::<YPBankCsvRecord, YPBankTextRecord, _, _>(input_file, output),
+        ("csv", "bin") => convert_and_save::<YPBankCsvRecord, YPBankBinRecord, _, _>(input_file, output),
+        ("bin", "txt") => convert_and_save::<YPBankBinRecord, YPBankTextRecord, _, _>(input_file, output),
+        ("bin", "csv") => convert_and_save::<YPBankBinRecord, YPBankCsvRecord, _, _>(input_file, output),
 
         _ => {
             Err(Error::new(ErrorKind::InvalidInput, format!("Unsupported format combination: {} -> {}", args.input_format, args.output_format)))
