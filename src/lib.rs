@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 pub use txt_format::{YPBankTextRecord};
 pub use csv_format::{YPBankCsvRecord};
 pub use bin_format::{YPBankBinRecord};
-pub use common::Transaction;
+pub use common::{Transaction, TransactionType, TransactionStatus};
 
 pub trait Readable<Source: Read> : Sized + Into<Transaction> {
     type Reader;

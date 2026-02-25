@@ -6,10 +6,12 @@
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/bin/converter/converter/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/bin/converter/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/bin/comparer/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/derive_macros/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/bin/converter/converter/target" />
       <excludeFolder url="file://$MODULE_DIR$/bin/converter/target" />
+      <excludeFolder url="file://$MODULE_DIR$/bin/comparer/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

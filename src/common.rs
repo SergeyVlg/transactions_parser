@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum TransactionType {
     #[serde(rename = "DEPOSIT")] Deposit,
     #[serde(rename = "TRANSFER")] Transfer,
@@ -54,7 +54,7 @@ impl Into<u8> for TransactionType {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum TransactionStatus {
     #[serde(rename = "PENDING")] Pending,
     #[serde(rename = "SUCCESS")] Success,
@@ -106,7 +106,7 @@ impl Display for TransactionStatus {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Transaction {
     pub id: u64,
     pub transaction_type: TransactionType,
