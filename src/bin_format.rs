@@ -14,17 +14,17 @@ pub struct YPBankBinRecord {
     description: String
 }
 
-impl Into<Transaction> for YPBankBinRecord {
-    fn into(self) -> Transaction {
+impl From<YPBankBinRecord> for Transaction {
+    fn from(value: YPBankBinRecord) -> Self {
         Transaction {
-            id: self.id,
-            transaction_type: self.transaction_type,
-            from_user_id: self.from_user_id,
-            to_user_id: self.to_user_id,
-            amount: self.amount,
-            timestamp: self.timestamp,
-            transaction_status: self.transaction_status,
-            description: self.description,
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
         }
     }
 }
@@ -265,7 +265,6 @@ mod tests {
 
     #[test]
     fn write_serializes_two_records_correctly() {
-        let record1 = sample_record();
         let record2 = YPBankBinRecord {
             id: 999999,
             transaction_type: TransactionType::Deposit,
@@ -291,7 +290,6 @@ mod tests {
 
         let offset2 = 8 + size1 as usize;
 
-        //check second record starts with magic bytes
         assert_eq!(&buffer[offset2..offset2+4], b"YPBN");
 
         let size2_bytes = &buffer[offset2+4..offset2+8];

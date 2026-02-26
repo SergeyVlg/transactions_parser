@@ -1,8 +1,8 @@
+use clap::Parser as ClapParser;
 use std::fs::File;
 use std::io::{Error, ErrorKind, Read, Write};
 use std::path::Path;
-use clap::Parser as ClapParser;
-use transactions_parser::{Parser, Readable, Writable, YPBankCsvRecord, YPBankBinRecord, Transaction, YPBankTextRecord};
+use transactions_parser::{Parser, Readable, Writable, YPBankBinRecord, YPBankCsvRecord, YPBankTextRecord};
 
 #[derive(ClapParser, Debug)]
 #[command(version, about, long_about = None)]
@@ -53,15 +53,11 @@ where
     let mut parser = Parser::<TFrom, _>::new(source);
     let mut serializer = transactions_parser::Serializer::<TTo, _>::new(target);
 
-    // Создаем "ленивый" итератор    
-    let pipeline_iterator = parser
+    let target_records = parser
         .by_ref()
-        .filter_map(|res| {
-            let transaction: Transaction = res.into(); //здесь порождается объект, возможно стоит заранее создать один экземпляр, и просто его заполнять в замыкании
-            Some(TTo::from(transaction))
-        });
+        .map(|res| TTo::from(res.into()));
     
-    serializer.serialize(pipeline_iterator).map_err(|e| e.into())?;
+    serializer.serialize(target_records).map_err(|e| e.into())?;
     
     if let Some(err) = parser.read_error {
         return Err(err.into());

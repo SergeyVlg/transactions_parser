@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
+//noinspection DuplicatedCode
 #[serde_as]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -80,17 +81,18 @@ impl From<TextRecordError> for std::io::Error {
     }
 }
 
-impl Into<Transaction> for YPBankTextRecord {
-    fn into(self) -> Transaction {
+//noinspection DuplicatedCode
+impl From<YPBankTextRecord> for Transaction {
+    fn from(value: YPBankTextRecord) -> Self {
         Transaction {
-            id: self.id,
-            transaction_type: self.transaction_type,
-            from_user_id: self.from_user_id,
-            to_user_id: self.to_user_id,
-            amount: self.amount as i64,
-            timestamp: self.timestamp,
-            transaction_status: self.transaction_status,
-            description: self.description,
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount as i64,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
         }
     }
 }
@@ -123,7 +125,7 @@ impl<R: Read> Readable<R> for YPBankTextRecord {
         let mut line_buf = String::with_capacity(128);
 
         if reader.fill_buf()
-            .map_err(|e| TextRecordError::ReadLineError(e))?
+            .map_err(TextRecordError::ReadLineError)?
             .is_empty() {
             return Err(TextRecordError::EndOfFile)
         }
@@ -249,10 +251,6 @@ mod tests {
         assert!(s.contains("TX_TYPE: DEPOSIT\n"));
         assert!(s.contains("DESCRIPTION: \"Second tx\"\n"));
 
-        // Проверяем наличие разделителя между записями и в конце
-        // Логика записи: каждая запись заканчивается пустой строкой.
-        // Значит, после первой записи будет одна пустая строка, и после второй тоже.
-        // "Field: Val\n\nField: Val\n\n"
         let parts: Vec<&str> = s.split("\n\n").collect();
         assert_eq!(parts.len(), 3, "Should have 2 records separated by blank lines and trailing newline");
         assert!(!parts[0].is_empty());
@@ -291,7 +289,6 @@ DESCRIPTION: "User transfer"
         assert_eq!(rec.amount, 1000);
         assert_eq!(rec.timestamp, 1633056800000);
         assert_eq!(rec.transaction_status, TransactionStatus::Failure);
-        // Парсер удаляет кавычки при чтении
         assert_eq!(rec.description, "User transfer");
     }
 
@@ -328,7 +325,6 @@ DESCRIPTION: "User withdrawal"
         assert!(parser.next().is_none());
         assert!(parser.read_error.is_none(), "Read error: {}", parser.read_error.unwrap());
 
-        // Record 1
         assert_eq!(r1.id, 1);
         assert_eq!(r1.transaction_type, TransactionType::Deposit);
         assert_eq!(r1.from_user_id, 0);
@@ -338,7 +334,6 @@ DESCRIPTION: "User withdrawal"
         assert_eq!(r1.transaction_status, TransactionStatus::Success);
         assert_eq!(r1.description, "Terminal deposit");
 
-        // Record 2
         assert_eq!(r2.id, 2);
         assert_eq!(r2.transaction_type, TransactionType::Withdrawal);
         assert_eq!(r2.from_user_id, 10);

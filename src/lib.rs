@@ -41,10 +41,8 @@ where
     TRecord: Readable<Source>,
     Source: Read,
 {
-    //type Item = Result<TRecord, TRecord::Error>;
     type Item = TRecord;
-
-    // может сделать Item обычным TRecord, а ошибку сохранять в поле read_error?
+    
     fn next(&mut self) -> Option<Self::Item> {
         match TRecord::read(&mut self.reader) {
             Ok(record) => Some(record),

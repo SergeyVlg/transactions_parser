@@ -144,7 +144,6 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 
     #[test]
     fn test_txt_vs_csv_different() {
-        // В первом файле (TXT) транзакции 1, 2, 4
         let txt_data = "\
 TX_ID: 1
 TX_TYPE: DEPOSIT
@@ -174,7 +173,6 @@ STATUS: SUCCESS
 DESCRIPTION: \"test\"
 ";
 
-        // Во втором файле (CSV) транзакции 2, 3, 4
         let csv_data = "\
 TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 2,DEPOSIT,1,2,100,1234567890,SUCCESS,\"test\"
@@ -194,21 +192,19 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
         assert!(!output_str.contains("Files are identical"));
         assert!(output_str.contains("Transaction with id 1 is only in file 1"));
         assert!(output_str.contains("Transaction with id 3 is only in file 2"));
-        // Транзакции 2 и 4 есть в обоих
+
         assert!(!output_str.contains("Transaction with id 2"));
         assert!(!output_str.contains("Transaction with id 4"));
     }
 
     #[test]
     fn test_bin_vs_csv_different() {
-        // Бинарный файл: транзакции 10, 20, 30
         let bin_data = create_bin_data(vec![
             create_transaction(10),
             create_transaction(20),
             create_transaction(30)
         ]);
 
-        // CSV файл: транзакции 10, 30, 40
         let csv_data = "\
 TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 10,DEPOSIT,1,2,100,1234567890,SUCCESS,\"test\"
@@ -234,7 +230,6 @@ TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION
 
     #[test]
     fn test_txt_vs_bin_different() {
-        // TXT файл: транзакции 1, 5, 6
         let txt_data = "\
 TX_ID: 1
 TX_TYPE: DEPOSIT
@@ -264,7 +259,6 @@ STATUS: SUCCESS
 DESCRIPTION: \"test\"
 ";
 
-        // BIN файл: транзакции 1, 2, 6
         let bin_data = create_bin_data(vec![
             create_transaction(1),
             create_transaction(2),

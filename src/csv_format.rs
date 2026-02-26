@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::io::{Error, ErrorKind, Read, Write};
 
+//noinspection DuplicatedCode
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -43,17 +44,18 @@ impl IsEofError for Error {
     }
 }
 
-impl Into<Transaction> for YPBankCsvRecord {
-    fn into(self) -> Transaction {
+//noinspection DuplicatedCode
+impl From<YPBankCsvRecord> for Transaction {
+    fn from(value: YPBankCsvRecord) -> Self {
         Transaction {
-            id: self.id,
-            transaction_type: self.transaction_type,
-            from_user_id: self.from_user_id,
-            to_user_id: self.to_user_id,
-            amount: self.amount as i64,
-            timestamp: self.timestamp,
-            transaction_status: self.transaction_status,
-            description: self.description,
+            id: value.id,
+            transaction_type: value.transaction_type,
+            from_user_id: value.from_user_id,
+            to_user_id: value.to_user_id,
+            amount: value.amount as i64,
+            timestamp: value.timestamp,
+            transaction_status: value.transaction_status,
+            description: value.description,
         }
     }
 }

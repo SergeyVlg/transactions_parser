@@ -44,9 +44,9 @@ impl From<u8> for TransactionType {
     }
 }
 
-impl Into<u8> for TransactionType {
-    fn into(self) -> u8 {
-        match self {
+impl From<TransactionType> for u8 {
+    fn from(transaction_type: TransactionType) -> Self {
+        match transaction_type {
             TransactionType::Deposit => 0,
             TransactionType::Transfer => 1,
             TransactionType::Withdrawal => 2,
@@ -86,9 +86,9 @@ impl From<u8> for TransactionStatus {
     }
 }
 
-impl Into<u8> for TransactionStatus {
-    fn into(self) -> u8 {
-        match self {
+impl From<TransactionStatus> for u8 {
+    fn from(transaction_status: TransactionStatus) -> Self {
+        match transaction_status {
             TransactionStatus::Success => 0,
             TransactionStatus::Failure => 1,
             TransactionStatus::Pending => 2,
