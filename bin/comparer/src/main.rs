@@ -52,35 +52,35 @@ where
     TSource2: Read,
     TOutput: Write
 {
-    let mut parser1 = Parser::<TFormat1, _>::new(first_source);
-    let mut parser2 = Parser::<TFormat2, _>::new(second_source);
+    let mut first_parser = Parser::<TFormat1, _>::new(first_source);
+    let mut second_parser = Parser::<TFormat2, _>::new(second_source);
 
-    let mut set1: HashSet<Transaction> = parser1
+    let mut first_set: HashSet<Transaction> = first_parser
         .by_ref()
         .map(|res| res.into())
         .collect();
 
-    if let Some(err) = parser1.read_error {
+    if let Some(err) = first_parser.read_error {
         return Err(err.into());
     }
 
     let mut files_is_same = true;
 
-    parser2.by_ref()
+    second_parser.by_ref()
     .map(|res| res.into())
     .try_for_each(|transaction: Transaction| -> Result<(), Error> {
-         if !set1.remove(&transaction) {
+         if !first_set.remove(&transaction) {
              files_is_same = false;
              writeln!(output, "Transaction with id {} is only in file 2", transaction.id)?;
          }
         Ok(())
      })?;
 
-    if let Some(err) = parser2.read_error {
+    if let Some(err) = second_parser.read_error {
         return Err(err.into());
     }
 
-    files_is_same &= set1.is_empty();
+    files_is_same &= first_set.is_empty();
 
     if files_is_same {
         writeln!(output, "Files are identical")?;
@@ -88,7 +88,7 @@ where
         return Ok(());
     }
 
-    for transaction in set1 {
+    for transaction in first_set {
         writeln!(output, "Transaction with id {} is only in file 1", transaction.id)?;
     }
 
