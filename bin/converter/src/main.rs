@@ -30,12 +30,12 @@ fn main() -> std::io::Result<()> {
     let output = std::io::stdout();
 
     match (args.input_format.as_str(), args.output_format.as_str()) {
-        ("txt", "csv") => convert_and_save::<YPBankTextRecord, YPBankCsvRecord, _, _>(input_file, output),
-        ("txt", "bin") => convert_and_save::<YPBankTextRecord, YPBankBinRecord, _, _>(input_file, output),
-        ("csv", "txt") => convert_and_save::<YPBankCsvRecord, YPBankTextRecord, _, _>(input_file, output),
-        ("csv", "bin") => convert_and_save::<YPBankCsvRecord, YPBankBinRecord, _, _>(input_file, output),
-        ("bin", "txt") => convert_and_save::<YPBankBinRecord, YPBankTextRecord, _, _>(input_file, output),
-        ("bin", "csv") => convert_and_save::<YPBankBinRecord, YPBankCsvRecord, _, _>(input_file, output),
+        ("txt", "csv") => convert::<YPBankTextRecord, YPBankCsvRecord, _, _>(input_file, output),
+        ("txt", "bin") => convert::<YPBankTextRecord, YPBankBinRecord, _, _>(input_file, output),
+        ("csv", "txt") => convert::<YPBankCsvRecord, YPBankTextRecord, _, _>(input_file, output),
+        ("csv", "bin") => convert::<YPBankCsvRecord, YPBankBinRecord, _, _>(input_file, output),
+        ("bin", "txt") => convert::<YPBankBinRecord, YPBankTextRecord, _, _>(input_file, output),
+        ("bin", "csv") => convert::<YPBankBinRecord, YPBankCsvRecord, _, _>(input_file, output),
 
         _ => {
             Err(Error::new(ErrorKind::InvalidInput, format!("Unsupported format combination: {} -> {}", args.input_format, args.output_format)))
@@ -43,7 +43,7 @@ fn main() -> std::io::Result<()> {
     }
 }
 
-fn convert_and_save<TFrom, TTo, TSource, TTarget>(source: TSource, target: TTarget) -> Result<(), Error>
+fn convert<TFrom, TTo, TSource, TTarget>(source: TSource, target: TTarget) -> Result<(), Error>
 where
     TFrom: Readable<TSource>,
     TTo: Writable,
@@ -93,7 +93,7 @@ mod tests {
         let input_cursor = Cursor::new(input_data.as_bytes());
         let mut output_cursor = Cursor::new(Vec::new());
 
-        let result = convert_and_save::<YPBankCsvRecord, YPBankTextRecord, _, _>(
+        let result = convert::<YPBankCsvRecord, YPBankTextRecord, _, _>(
             input_cursor,
             &mut output_cursor,
         );
@@ -111,7 +111,7 @@ mod tests {
         let input_cursor = Cursor::new(input_data.as_bytes());
         let mut output_cursor = Cursor::new(Vec::new());
 
-        convert_and_save::<YPBankTextRecord, YPBankCsvRecord, _, _>(
+        convert::<YPBankTextRecord, YPBankCsvRecord, _, _>(
             input_cursor,
             &mut output_cursor,
         ).expect("Conversion failed");
@@ -128,7 +128,7 @@ mod tests {
         let input_cursor = Cursor::new(original_text.as_bytes());
         let mut bin_output = Cursor::new(Vec::new());
 
-        convert_and_save::<YPBankTextRecord, YPBankBinRecord, _, _>(
+        convert::<YPBankTextRecord, YPBankBinRecord, _, _>(
             input_cursor,
             &mut bin_output,
         ).expect("Text to Bin failed");
@@ -140,7 +140,7 @@ mod tests {
         let bin_input = Cursor::new(bin_data);
         let mut text_output = Cursor::new(Vec::new());
 
-        convert_and_save::<YPBankBinRecord, YPBankTextRecord, _, _>(
+        convert::<YPBankBinRecord, YPBankTextRecord, _, _>(
             bin_input,
             &mut text_output,
         ).expect("Bin to Text failed");
@@ -155,7 +155,7 @@ mod tests {
         let input_cursor = Cursor::new(original_csv.as_bytes());
         let mut bin_output = Cursor::new(Vec::new());
 
-        convert_and_save::<YPBankCsvRecord, YPBankBinRecord, _, _>(
+        convert::<YPBankCsvRecord, YPBankBinRecord, _, _>(
             input_cursor,
             &mut bin_output,
         ).expect("CSV to Bin failed");
@@ -164,7 +164,7 @@ mod tests {
         let bin_input = Cursor::new(bin_data);
         let mut csv_output = Cursor::new(Vec::new());
 
-        convert_and_save::<YPBankBinRecord, YPBankCsvRecord, _, _>(
+        convert::<YPBankBinRecord, YPBankCsvRecord, _, _>(
             bin_input,
             &mut csv_output,
         ).expect("Bin to CSV failed");
@@ -179,7 +179,7 @@ mod tests {
         let input_cursor = Cursor::new(invalid_data.as_bytes());
         let mut output_cursor = Cursor::new(Vec::new());
 
-        let result = convert_and_save::<YPBankCsvRecord, YPBankTextRecord, _, _>(
+        let result = convert::<YPBankCsvRecord, YPBankTextRecord, _, _>(
             input_cursor,
             &mut output_cursor,
         );
