@@ -131,55 +131,46 @@ impl<R: Read> Readable<R> for YPBankTextRecord {
     }
 
     fn read(reader: &mut Self::Reader) -> Result<YPBankTextRecord, TextRecordError> {
-        let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8); //сразу аллоцируем память
+        if reader.fill_buf()?.is_empty() {
+            return Err(TextRecordError::EndOfFile);
+        }
+
+        let mut kv_pairs: HashMap<String, String> = HashMap::with_capacity(8);
         let mut line_buf = String::with_capacity(128);
 
-        if reader.fill_buf()
-            .map_err(TextRecordError::ReadLineError)?
-            .is_empty() {
-            return Err(TextRecordError::EndOfFile)
-        }
-
-        //todo refactor
         loop {
-            match reader.read_line(&mut line_buf) {
-                Ok(0) => break, //EOF
-                Ok(_) => {
-                    let trimmed_line = line_buf.trim();
+            line_buf.clear();
+            let bytes_read = reader.read_line(&mut line_buf)?;
 
-                    if trimmed_line.starts_with('#') {
-                        line_buf.clear();
-                        continue;
-                    }
-
-                    if trimmed_line.is_empty() {
-                        if !kv_pairs.is_empty() {
-                            line_buf.clear();
-
-                            return Ok(Self::parse_transaction(&mut kv_pairs)?);
-                        }
-                    } else {
-                        let (k, v) = trimmed_line
-                            .split_once(':')
-                            .ok_or(TextRecordError::MissingColonAfterKey)?;
-
-                        kv_pairs.insert(k.trim().to_owned(), v.trim().trim_matches('"').to_owned());
-                    }
-
-                    line_buf.clear()
-                }
-                Err(e) => return Err(TextRecordError::ReadLineError(e)),
+            if bytes_read == 0 { //EOF
+                break;
             }
+
+            let trimmed = line_buf.trim();
+            if trimmed.starts_with('#') {
+                continue;
+            }
+
+            if trimmed.is_empty() {
+                if !kv_pairs.is_empty() {
+                    return Ok(Self::parse_transaction(&mut kv_pairs)?);
+                }
+
+                continue;
+            }
+
+            let (k, v) = trimmed
+                .split_once(':')
+                .ok_or(TextRecordError::MissingColonAfterKey)?;
+
+            kv_pairs.insert(k.trim().to_owned(), v.trim().trim_matches('"').to_owned());
         }
 
-        if !kv_pairs.is_empty() {
-            let res = Self::parse_transaction(&mut kv_pairs)?;
-            kv_pairs.clear();
-
-            return Ok(res);
+        if kv_pairs.is_empty() {
+            Err(TextRecordError::EndOfFile)
+        } else {
+            Ok(Self::parse_transaction(&mut kv_pairs)?)
         }
-
-        Err(TextRecordError::EndOfFile)
     }
 }
 
@@ -203,7 +194,7 @@ impl Writable for YPBankTextRecord {
 
         writeln!(&mut buff_writer, "STATUS: {}", self.transaction_status)?;
         writeln!(&mut buff_writer, "DESCRIPTION: \"{}\"", self.description)?;
-        writeln!(&mut buff_writer)?; // пустая строка как разделитель
+        writeln!(&mut buff_writer)?;
         buff_writer.flush()?;
         Ok(())
     }
@@ -232,7 +223,7 @@ mod tests {
             amount: 1000,
             timestamp: 1633056800000,
             transaction_status: TransactionStatus::Failure,
-            description: "User transfer".to_string(), // В самих данных кавычек нет
+            description: "User transfer".to_string(),
         };
         let rec2 = YPBankTextRecord {
             id: 999,
