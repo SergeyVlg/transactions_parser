@@ -173,7 +173,7 @@ mod tests {
         }
     }
 
-    impl std::error::Error for MockError {}
+    impl Error for MockError {}
 
     impl IsEofError for MockError {
         fn is_eof(&self) -> bool {
@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn round_trip_via_transactions() {
-        let ids = vec![7, 14, 21];
+        let ids = [7, 14, 21];
         let transactions: Vec<Transaction> = ids.iter().map(|&id| sample_transaction(id)).collect();
 
         // Transaction → MockRecord → serialize
