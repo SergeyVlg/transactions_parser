@@ -2,6 +2,12 @@ use crate::common::{Transaction, TransactionStatus, TransactionType};
 use crate::{Readable, Writable};
 use std::io::{BufReader, Error, ErrorKind, Read, Write};
 
+/// Запись транзакции в бинарном формате.
+///
+/// Формат файла:
+/// 1. Магические байты `YPBN` (4 байта) перед каждой записью.
+/// 2. Размер записи (u32, Big-Endian).
+/// 3. Поля записи в бинарном виде (числа в Big-Endian, описание с префиксом длины).
 #[derive(Debug, PartialEq)]
 pub struct YPBankBinRecord {
     id: u64,

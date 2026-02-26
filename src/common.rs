@@ -2,10 +2,14 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
+/// Тип банковской транзакции.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum TransactionType {
+    /// Пополнение счета.
     #[serde(rename = "DEPOSIT")] Deposit,
+    /// Перевод средств между счетами.
     #[serde(rename = "TRANSFER")] Transfer,
+    /// Снятие средств со счета.
     #[serde(rename = "WITHDRAWAL")] Withdrawal
 }
 
@@ -54,10 +58,14 @@ impl From<TransactionType> for u8 {
     }
 }
 
+/// Статус обработки транзакции.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum TransactionStatus {
+    /// Транзакция ожидает обработки.
     #[serde(rename = "PENDING")] Pending,
+    /// Транзакция успешно завершена.
     #[serde(rename = "SUCCESS")] Success,
+    /// Транзакция завершилась ошибкой.
     #[serde(rename = "FAILURE")] Failure
 }
 
@@ -106,14 +114,25 @@ impl Display for TransactionStatus {
     }
 }
 
+/// Основная структура, представляющая банковскую транзакцию.
+///
+/// Содержит всю необходимую информацию о переводе или операции со счетом.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Transaction {
+    /// Уникальный идентификатор транзакции.
     pub id: u64,
+    /// Тип операции (депозит, перевод, снятие).
     pub transaction_type: TransactionType,
+    /// ID пользователя, отправляющего средства.
     pub from_user_id: u64,
+    /// ID пользователя, получающего средства.
     pub to_user_id: u64,
+    /// Сумма операции.
     pub amount: i64,
+    /// Временная метка операции (timestamp).
     pub timestamp: u64,
+    /// Текущий статус транзакции.
     pub transaction_status: TransactionStatus,
+    /// Текстовое описание или примечание к транзакции.
     pub description: String,
 }

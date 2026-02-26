@@ -12,8 +12,14 @@ pub use csv_format::{YPBankCsvRecord};
 pub use bin_format::{YPBankBinRecord};
 pub use common::{Transaction, TransactionType, TransactionStatus};
 
+/// Трейт для типов, поддерживающих чтение из источника данных.
+///
+/// Этот трейт позволяет абстрагироваться от конкретного формата данных (CSV, бинарный и т.д.)
+/// и способа их чтения. Типы, реализующие этот трейт, могут быть преобразованы в `Transaction`.
 pub trait Readable<Source: Read> : Sized + Into<Transaction> {
+    /// Тип читателя, используемого для извлечения данных.
     type Reader;
+    /// Тип ошибки, возникающей при чтении.
     type Error: Error + IsEofError + From<std::io::Error> + Into<std::io::Error>;
 
     #[doc(hidden)]
@@ -22,16 +28,24 @@ pub trait Readable<Source: Read> : Sized + Into<Transaction> {
     fn read(reader: &mut Self::Reader) -> Result<Self, Self::Error>;
 }
 
+/// Трейт для проверки, является ли ошибка указанием на конец файла (EOF).
 pub trait IsEofError {
+    /// Возвращает `true`, если ошибка соответствует концу файла.
     fn is_eof(&self) -> bool;
 }
 
+/// Парсер, преобразующий поток байтов в поток записей определенного типа.
+///
+/// `Parser` читает исходный поток (`Source`) и использует реализацию `Readable`
+/// для `TRecord`, чтобы итеративно извлекать записи.
 pub struct Parser<TRecord, Source>
 where
     TRecord: Readable<Source>,
     Source: Read
 {
     reader: TRecord::Reader,
+    /// Содержит ошибку чтения, если она произошла в процессе итерации.
+    /// После возникновения ошибки итератор будет возвращать `None`.
     pub read_error: Option<TRecord::Error>,
     _marker: PhantomData<Source>,
 }
@@ -60,6 +74,7 @@ where
     TRecord: Readable<Source>,
     Source: Read
 {
+    /// Создает новый экземпляр парсера из источника данных.
     pub fn new(source: Source) -> Self {
         let reader = TRecord::build_reader(source);
 
@@ -71,7 +86,11 @@ where
     }
 }
 
+/// Трейт для типов, поддерживающих запись в поток данных.
+///
+/// Позволяет сериализовать данные транзакции в конкретный формат.
 pub trait Writable: From<Transaction> {
+    /// Тип ошибки, возникающей при записи.
     type Error: Error + From<std::io::Error> + Into<std::io::Error>;
 
     #[doc(hidden)]
@@ -81,6 +100,7 @@ pub trait Writable: From<Transaction> {
     fn write<W: Write>(&self, writer: &mut W) -> Result<(), Self::Error>;
 }
 
+/// Сериализатор, преобразующий поток записей в байты и записывающий их в целевой поток.
 pub struct Serializer<TRecord, Target>
 where
     TRecord: Writable,
@@ -95,6 +115,9 @@ where
     TRecord: Writable,
     Target: Write
 {
+    /// Создает новый сериализатор, который будет писать в указанный `target`.
+    ///
+    /// `target` автоматически оборачивается в `BufWriter` для эффективности.
     pub fn new(target: Target) -> Self {
         let buffered_target = BufWriter::new(target);
         Self {
@@ -103,6 +126,10 @@ where
         }
     }
 
+    /// Сериализует коллекцию записей и записывает их в целевой поток.
+    ///
+    /// Сначала записывается заголовок (если предусмотрен форматом), затем все записи,
+    /// после чего буфер сбрасывается.
     pub fn serialize<I>(&mut self, records: I) -> Result<(), TRecord::Error>
     where I : IntoIterator<Item = TRecord>,
     {

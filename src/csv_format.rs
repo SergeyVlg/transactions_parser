@@ -5,6 +5,10 @@ use serde_with::{serde_as, DisplayFromStr};
 use std::io::{Error, ErrorKind, Read, Write};
 
 //noinspection DuplicatedCode
+/// Запись транзакции в формате CSV (Comma-Separated Values).
+///
+/// Ожидается наличие заголовка: `TX_ID,TX_TYPE,FROM_USER_ID,TO_USER_ID,AMOUNT,TIMESTAMP,STATUS,DESCRIPTION`.
+/// Поля разделяются запятыми, описание заключается в двойные кавычки.
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

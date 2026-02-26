@@ -8,6 +8,11 @@ use std::fmt::{Display, Formatter};
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 //noinspection DuplicatedCode
+/// Запись транзакции в текстовом формате "ключ-значение".
+///
+/// Каждая запись состоит из набора строк вида `КЛЮЧ: ЗНАЧЕНИЕ`.
+/// Записи разделяются одной или несколькими пустыми строками.
+/// Комментарии начинаются с символа `#`.
 #[serde_as]
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,11 +46,16 @@ pub struct YPBankTextRecord {
     description: String
 }
 
+/// Ошибки, возникающие при парсинге текстовых записей.
 #[derive(Debug)]
 pub enum TextRecordError {
+    /// Отсутствует двоеточие, разделяющее ключ и значение.
     MissingColonAfterKey,
+    /// Ошибка ввода-вывода при чтении строки.
     ReadLineError(std::io::Error),
+    /// Ошибка парсинга полей (например, неверный формат числа или даты).
     ParseError { error: String },
+    /// Достигнут конец файла.
     EndOfFile,
 }
 
