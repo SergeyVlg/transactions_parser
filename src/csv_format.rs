@@ -1,5 +1,5 @@
 use crate::common::{Transaction, TransactionStatus, TransactionType};
-use crate::{IsEofError, Readable, Writable};
+use crate::{Readable, Writable};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use std::io::{Error, ErrorKind, Read, Write};
@@ -42,11 +42,7 @@ pub struct YPBankCsvRecord {
     description: String
 }
 
-impl IsEofError for Error {
-    fn is_eof(&self) -> bool {
-        matches!(self.kind(), ErrorKind::UnexpectedEof)
-    }
-}
+
 
 //noinspection DuplicatedCode
 impl From<YPBankCsvRecord> for Transaction {

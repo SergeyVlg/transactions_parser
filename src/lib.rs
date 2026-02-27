@@ -2,6 +2,7 @@ mod common;
 mod txt_format;
 mod csv_format;
 mod bin_format;
+mod errors;
 
 use std::error::Error;
 use std::io::{BufWriter, Read, Write};
