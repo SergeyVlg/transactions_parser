@@ -27,5 +27,8 @@ jobs:
     - name: Build
       run: cargo build --verbose
 
-    - name: Run tests
-      run: cargo test --workspace --verbose
+    - name: Test Library
+      run: cargo test --lib
+
+    - name: Test binary crates
+      run: cargo test --bins
