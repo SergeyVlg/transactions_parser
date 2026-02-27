@@ -3,6 +3,11 @@ name = "transactions_parser"
 version = "0.1.0"
 edition = "2024"
 
+[workspace]
+members = [
+    "bin/*",
+]
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 serde_with = "3.16.1"
