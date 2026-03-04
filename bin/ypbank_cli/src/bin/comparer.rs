@@ -67,14 +67,14 @@ where
     let mut files_is_same = true;
 
     second_parser.by_ref()
-    .map(|res| res.into())
-    .try_for_each(|transaction: Transaction| -> Result<(), Error> {
-         if !first_set.remove(&transaction) {
-             files_is_same = false;
-             writeln!(output, "Transaction with id {} is only in file 2", transaction.id)?;
-         }
-        Ok(())
-     })?;
+        .map(|res| res.into())
+        .try_for_each(|transaction: Transaction| -> Result<(), Error> {
+            if !first_set.remove(&transaction) {
+                files_is_same = false;
+                writeln!(output, "Transaction with id {} is only in file 2", transaction.id)?;
+            }
+            Ok(())
+        })?;
 
     if let Some(err) = second_parser.read_error {
         return Err(err.into());

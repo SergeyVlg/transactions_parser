@@ -736,15 +736,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ypbank_comparer"
-version = "0.1.0"
-dependencies = [
- "clap",
- "transactions_parser",
-]
-
-[[package]]
-name = "ypbank_converter"
+name = "ypbank_cli"
 version = "0.1.0"
 dependencies = [
  "clap",
