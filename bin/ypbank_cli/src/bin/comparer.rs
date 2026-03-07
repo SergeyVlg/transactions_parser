@@ -24,11 +24,20 @@ struct Args {
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
-    Path::new(&args.first_file).try_exists().map_err(|e| format!("First file path wrong, error: {}", e)).expect("First file path wrong");
-    Path::new(&args.second_file).try_exists().map_err(|e| format!("Second file path wrong, error: {}", e)).expect("Second file path wrong");
+    match Path::new(&args.first_file).try_exists() {
+        Ok(true) => {},
+        Ok(false) => return Err(Error::new(ErrorKind::NotFound, "First file path wrong")),
+        Err(e) => return Err(Error::new(ErrorKind::InvalidInput, format!("First file path error: {}", e))),
+    }
 
-    let first_file = File::open(args.first_file).map_err(|e| format!("Open first file error: {}", e)).expect("First file does not exist");
-    let second_file = File::open(args.second_file).map_err(|e| format!("Open second file error: {}", e)).expect("Second file does not exist");
+    match Path::new(&args.second_file).try_exists() {
+        Ok(true) => {},
+        Ok(false) => return Err(Error::new(ErrorKind::NotFound, "Second file path wrong")),
+        Err(e) => return Err(Error::new(ErrorKind::InvalidInput, format!("Second file path error: {}", e))),
+    }
+
+    let first_file = File::open(args.first_file)?;
+    let second_file = File::open(args.second_file)?;
 
     match (args.first_file_format.as_str(), args.second_file_format.as_str()) {
         ("txt", "csv") => compare::<YPBankTextRecord, YPBankCsvRecord, _, _, _>(first_file, second_file, std::io::stdout()),
@@ -55,26 +64,41 @@ where
     let mut first_parser = Parser::<TFormat1, _>::new(first_source);
     let mut second_parser = Parser::<TFormat2, _>::new(second_source);
 
-    let mut first_set: HashSet<Transaction> = first_parser
+    let mut first_set: HashSet<Transaction> = HashSet::new();
+
+    first_parser
         .by_ref()
         .map(|res| res.into())
-        .collect();
+        .try_for_each(|transaction: Transaction| -> Result<(), Error> {
+            let tx_id = transaction.id;
+            if !first_set.insert(transaction) {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("Duplicate transaction found in file 1 with id: {}", tx_id)
+                ));
+            }
+            Ok(())
+        })?;
+
 
     if let Some(err) = first_parser.read_error {
         return Err(err.into());
     }
 
     let mut files_is_same = true;
+    let mut uniq_transactions_in_second_file = 0;
 
     second_parser.by_ref()
-    .map(|res| res.into())
-    .try_for_each(|transaction: Transaction| -> Result<(), Error> {
-         if !first_set.remove(&transaction) {
-             files_is_same = false;
-             writeln!(output, "Transaction with id {} is only in file 2", transaction.id)?;
-         }
-        Ok(())
-     })?;
+        .map(|res| res.into())
+        .try_for_each(|transaction: Transaction| -> Result<(), Error> {
+            if !first_set.remove(&transaction) { // Если во втором файле есть задублированные транзакции, то они считаются уникальными для второго файла, так как в первом файле их нет (иначе будет ошибка)
+                files_is_same = false;
+                uniq_transactions_in_second_file += 1;
+
+                writeln!(output, "Transaction with id {} is only in file 2", transaction.id)?;
+            }
+            Ok(())
+        })?;
 
     if let Some(err) = second_parser.read_error {
         return Err(err.into());
@@ -88,9 +112,14 @@ where
         return Ok(());
     }
 
+    let uniq_transactions_in_first_file = first_set.len();
     for transaction in first_set {
         writeln!(output, "Transaction with id {} is only in file 1", transaction.id)?;
     }
+
+    writeln!(output, "---------------------------------------------")?;
+    writeln!(output, "Total unique transactions in file 1: {}", uniq_transactions_in_first_file)?;
+    writeln!(output, "Total unique transactions in file 2: {}", uniq_transactions_in_second_file)?;
 
     Ok(())
 }

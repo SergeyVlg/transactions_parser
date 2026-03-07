@@ -86,7 +86,7 @@ impl<R: Read> Readable<R> for YPBankBinRecord {
 
         let mut u8_buf = [0u8; 1];
         reader.read_exact(&mut u8_buf)?;
-        let transaction_type = TransactionType::from(u8::from_be_bytes(u8_buf));
+        let transaction_type = TransactionType::try_from(u8::from_be_bytes(u8_buf))?;
 
         reader.read_exact(&mut u64_buf)?;
         let from_user_id = u64::from_be_bytes(u64_buf);
@@ -101,7 +101,7 @@ impl<R: Read> Readable<R> for YPBankBinRecord {
         let timestamp = u64::from_be_bytes(u64_buf);
 
         reader.read_exact(&mut u8_buf)?;
-        let transaction_status = TransactionStatus::from(u8::from_be_bytes(u8_buf));
+        let transaction_status = TransactionStatus::try_from(u8::from_be_bytes(u8_buf))?;
 
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf)?;
@@ -339,5 +339,42 @@ mod tests {
 
         assert!(parser.next().is_none());
         assert!(parser.read_error.is_none(), "Expected no read error, got: {:?}", parser.read_error);
+    }
+
+    #[test]
+    fn read_fails_on_invalid_enum_values() {
+        let record = sample_record();
+
+        let mut buffer = Vec::new();
+        record.write(&mut buffer).unwrap();
+        // Индекс TransactionType 16: 4 (magic) + 4 (size) + 8 (id) = 16
+        buffer[16] = 255;
+
+        let cursor = Cursor::new(buffer);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
+
+        assert!(parser.next().is_none());
+        if let Some(err) = parser.read_error {
+            assert_eq!(err.kind(), ErrorKind::InvalidData);
+            assert!(err.to_string().contains("Wrong transaction type value"));
+        } else {
+            panic!("Expected an error for invalid TransactionType, but got none");
+        }
+
+        let mut buffer = Vec::new();
+        record.write(&mut buffer).unwrap();
+        // Индекс TransactionStatus 49: 16 (type) + 8 (from) + 8 (to) + 8 (amount) + 8 (timestamp) = 49
+        buffer[49] = 255;
+
+        let cursor = Cursor::new(buffer);
+        let mut parser = Parser::<YPBankBinRecord, _>::new(cursor);
+
+        assert!(parser.next().is_none());
+        if let Some(err) = parser.read_error {
+            assert_eq!(err.kind(), ErrorKind::InvalidData);
+            assert!(err.to_string().contains("Wrong transaction status value"));
+        } else {
+            panic!("Expected an error for invalid TransactionStatus, but got none");
+        }
     }
 }

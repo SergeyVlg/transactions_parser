@@ -1,4 +1,5 @@
 use std::fmt::{Display, Formatter};
+use std::io::ErrorKind;
 use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
@@ -37,13 +38,16 @@ impl Display for TransactionType {
     }
 }
 
-impl From<u8> for TransactionType {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for TransactionType {
+    type Error = std::io::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => TransactionType::Deposit,
-            1 => TransactionType::Transfer,
-            2 => TransactionType::Withdrawal,
-            _ => panic!("Invalid transaction type value: {}", value),
+            0 => Ok(TransactionType::Deposit),
+            1 => Ok(TransactionType::Transfer),
+            2 => Ok(TransactionType::Withdrawal),
+
+            _ => Err(std::io::Error::new(ErrorKind::InvalidData, format!("Wrong transaction type value: {}", value))),
         }
     }
 }
@@ -83,13 +87,16 @@ impl FromStr for TransactionStatus {
     }
 }
 
-impl From<u8> for TransactionStatus {
-    fn from(value: u8) -> Self {
+impl TryFrom<u8> for TransactionStatus {
+    type Error = std::io::Error;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => TransactionStatus::Success,
-            1 => TransactionStatus::Failure,
-            2 => TransactionStatus::Pending,
-            _ => panic!("Invalid transaction status value: {}", value),
+            0 => Ok(TransactionStatus::Success),
+            1 => Ok(TransactionStatus::Failure),
+            2 => Ok(TransactionStatus::Pending),
+
+            _ => Err(std::io::Error::new(ErrorKind::InvalidData, format!("Wrong transaction status value: {}", value))),
         }
     }
 }

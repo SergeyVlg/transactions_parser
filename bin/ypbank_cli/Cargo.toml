@@ -1,0 +1,16 @@
+[package]
+name = "ypbank_cli"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.60", features = ["derive"] }
+transactions_parser = { path = "../../../transactions_parser" }
+
+[[bin]]
+name = "converter"
+path = "src/bin/converter.rs"
+
+[[bin]]
+name = "comparer"
+path = "src/bin/comparer.rs"

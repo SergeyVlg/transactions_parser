@@ -56,9 +56,9 @@ where
     let target_records = parser
         .by_ref()
         .map(|res| TTo::from(res.into()));
-    
+
     serializer.serialize(target_records).map_err(|e| e.into())?;
-    
+
     if let Some(err) = parser.read_error {
         return Err(err.into());
     }
